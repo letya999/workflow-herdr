@@ -1,0 +1,15 @@
+{
+  "change": "",
+  "volume": "",
+  "phase": "discuss",
+  "project": ".",
+  "homes": {},
+  "workspace_id": "",
+  "created": { "workspaces": [], "tabs": [], "panes": [] },
+  "roles": {
+    "brain": { "pane_id": "", "agent": null, "title": "Brain" },
+    "orchestrator": { "pane_id": "", "agent": "orchestrator", "title": "Orchestrator" },
+    "dispatchers": [],
+    "workers": []
+  }
+}

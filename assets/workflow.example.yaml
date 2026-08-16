@@ -1,0 +1,23 @@
+# Example project overlay.
+# Copy to the path in layout.overlay (see skill workflow.yaml).
+# Unlisted keys stay as in the skill YAML.
+
+# Where this project keeps coordination state:
+# layout:
+#   work_root: ".work"
+#   change_dir: "{work_root}/{change}"
+#   state: "{change_dir}/state.yaml"
+
+roles:
+  orchestrator:
+    cli: codex
+    model: gpt-5.6-sol
+    effort: low
+  dispatcher:
+    cli: codex
+    model: gpt-5.6-luna
+    effort: high
+  worker:
+    cli: grok
+    model: grok-4.6
+    effort: high

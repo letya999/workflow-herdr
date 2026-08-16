@@ -90,8 +90,11 @@ def validate(project: Path, change: str) -> dict:
     roles = session.get("roles") or {}
     if volume not in (config.get("volumes") or {}):
         errors.append(f"unknown volume: {volume}")
-    if volume == "large" and len(runnable) < 2:
-        errors.append("large requires at least two runnable tasks")
+    if volume == "large":
+        if workstreams and len(workstreams) < 2:
+            errors.append("large requires at least two workstreams")
+        elif not workstreams and len(runnable) < 2:
+            errors.append("large requires at least two runnable tasks")
     if volume == "medium" and (created_workspaces or created_tabs):
         errors.append("medium must stay in the current workspace and tab")
     if recipe.get("worktrees") is False and (workstreams or created_workspaces):

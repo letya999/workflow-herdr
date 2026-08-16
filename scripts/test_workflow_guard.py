@@ -301,6 +301,44 @@ class WorkflowGuardTests(unittest.TestCase):
             result = validate(root, "change")
             self.assertTrue(result["ok"], result["errors"])
 
+    def test_large_passes_after_streams_are_accepted(self) -> None:
+        for states in (("accepted", "running"), ("accepted", "accepted")):
+            with self.subTest(states=states), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                self.write_run(
+                    root,
+                    "large",
+                    {
+                        "tasks": [
+                            {"id": f"task-{index}", "state": state}
+                            for index, state in enumerate(states, 1)
+                        ],
+                        "workstreams": [
+                            {
+                                "id": f"stream-{index}",
+                                "task": f"task-{index}",
+                                "dispatcher": f"dispatcher-{index}",
+                                "worker": f"worker-{index}",
+                                "state": state,
+                                "worktree": f"C:/tmp/stream-{index}",
+                                "files": [f"src/{index}.py"],
+                            }
+                            for index, state in enumerate(states, 1)
+                        ],
+                    },
+                    active_roles=True,
+                    pairs=2,
+                )
+                receipts = root / ".work" / "change" / "receipts"
+                receipts.mkdir(parents=True, exist_ok=True)
+                for index, state in enumerate(states, 1):
+                    if state == "accepted":
+                        (receipts / f"task-{index}.dispatcher.md").write_text(
+                            "accepted", encoding="utf-8"
+                        )
+                result = validate(root, "change")
+                self.assertTrue(result["ok"], result["errors"])
+
 
 if __name__ == "__main__":
     unittest.main()

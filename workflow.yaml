@@ -1,0 +1,268 @@
+# Seats, volume recipes, CLIs, task states, and where a change lives.
+# Project overlay path is layout.overlay.
+
+layout:
+  work_root: ".work"
+  overlay: "{work_root}/workflow.yaml"
+  session: "{work_root}/run.json"
+  change_dir: "{work_root}/{change}"
+  state: "{change_dir}/state.yaml"
+  receipts: "{change_dir}/receipts"
+  worker_receipt: "{receipts}/{task}.worker.md"
+  dispatcher_receipt: "{receipts}/{task}.dispatcher.md"
+
+visibility:
+  pane_label: "{title} | {cli} {model} {effort}"
+  pane_label_many: "{title} {n} | {cli} {model} {effort}"
+  display_agent: "{title}"
+  display_agent_many: "{title} {n}"
+  metadata_source: workflow-herdr
+
+clis:
+  human:
+    herdr_kind: null
+    native_args: []
+  codex:
+    herdr_kind: codex
+    native_args:
+      - "--model"
+      - "{model}"
+      - "-c"
+      - "model_reasoning_effort={effort}"
+      - "--no-alt-screen"
+  grok:
+    herdr_kind: grok
+    native_args:
+      - "--model"
+      - "{model}"
+      - "--reasoning-effort"
+      - "{effort}"
+      - "--no-alt-screen"
+
+roles:
+  brain:
+    title: Brain
+    agent_name: brain
+    cli: human
+    model: null
+    effort: null
+    start: false
+    notes: This chat. Intent is what the human typed here.
+
+  orchestrator:
+    title: Orchestrator
+    agent_name: orchestrator
+    cli: codex
+    model: gpt-5.6-sol
+    effort: low
+    start: true
+
+  dispatcher:
+    title: Dispatcher
+    agent_name_pattern: "dispatcher-{n}"
+    cli: codex
+    model: gpt-5.6-luna
+    effort: high
+    start: true
+    many: true
+
+  worker:
+    title: Worker
+    agent_name_pattern: "worker-{n}"
+    cli: grok
+    model: grok-4.6
+    effort: high
+    start: true
+    many: true
+
+# Three run sizes. Brain chooses once, before topology is created.
+volumes:
+  small:
+    use_when: One short prompt, one turn, no open design decisions
+    artifacts: []
+    spec: false
+    adr: false
+    plan_file: false
+    worktrees: false
+    parallel: false
+    seats: [brain, worker]
+    sequence:
+      - id: discuss
+        owner: brain
+        gate: Intent is clear in the current chat
+      - id: execute
+        owner: worker
+        gate: Worker finished the requested change and Brain checked the result
+      - id: close
+        owner: brain
+        gate: Human said the slice is done
+
+  medium:
+    use_when: One story, several files, decisions still fit one context
+    artifacts: [separated_intent, specification, plan, state]
+    spec: true
+    adr: if-needed
+    plan_file: true
+    worktrees: false
+    parallel: false
+    seats: [brain, orchestrator, dispatcher, worker]
+    sequence:
+      - id: discuss
+        owner: brain
+        gate: Business intent is separated from implementation detail
+      - id: spec
+        owner: orchestrator
+        gate: Specification is explicit in the project home or agent handoff
+      - id: plan
+        owner: orchestrator
+        gate: Plan and implementation state are separate from intent and specification
+      - id: dispatch
+        owner: dispatcher
+        gate: dispatcher-1 is up before worker-1 in the project cwd
+      - id: execute
+        owner: worker
+        gate: Tasks reached in_review
+      - id: review
+        owner: dispatcher
+        gate: Tasks accepted or rejected
+      - id: close
+        owner: brain
+        gate: Human said the slice is done
+
+  large:
+    use_when: Two or more runnable workstreams with non-overlapping file boundaries
+    artifacts: [separated_intent, specification, decisions, plan, state]
+    spec: true
+    adr: true
+    plan_file: true
+    worktrees: true
+    parallel: true
+    seats: [brain, orchestrator, dispatcher, worker]
+    sequence:
+      - id: discuss
+        owner: brain
+        gate: Business intent is separated from implementation detail
+      - id: spec
+        owner: orchestrator
+        gate: Specification and decisions are explicit in project homes or agent handoff
+      - id: size
+        owner: orchestrator
+        gate: Orchestrator defined independent workstreams and file sets
+      - id: plan
+        owner: orchestrator
+        gate: Plan and state define independent workstreams and boundaries
+      - id: dispatch
+        owner: dispatcher
+        gate: Each worktree has dispatcher-N up before worker-N
+      - id: execute
+        owner: worker
+        gate: Tasks reached in_review
+      - id: review
+        owner: dispatcher
+        gate: Tasks accepted or rejected
+      - id: merge
+        owner: brain
+        gate: Streams merged to the source branch
+      - id: cleanup
+        owner: brain
+        gate: herdr worktree remove ran for every stream worktree
+      - id: close
+        owner: brain
+        gate: Human said the slice is done
+
+guards:
+  size_after_scope_resolution: true
+  large_min_runnable_tasks: 2
+  preflight_before_topology: true
+  forbid_existing_agent_reuse: true
+  dispatcher_start: before_worker
+  run_file_tracks_created_resources: true
+
+task_states:
+  pending: Listed, dependencies not satisfied
+  ready: Dependencies done, not assigned
+  assigned: Has workstream, dispatcher, and worker
+  running: Worker is implementing
+  blocked: Waiting on human or a missing fact
+  in_review: Worker claimed done; Herdr idle is not enough
+  rejected: Dispatcher sent it back
+  accepted: Dispatcher receipt passed
+  closed: Human signed off
+
+task_transitions:
+  pending:
+    - ready
+    - blocked
+  ready:
+    - assigned
+    - blocked
+  assigned:
+    - running
+    - blocked
+  running:
+    - in_review
+    - blocked
+  in_review:
+    - accepted
+    - rejected
+    - blocked
+  rejected:
+    - running
+    - blocked
+  blocked:
+    - ready
+    - assigned
+    - running
+  accepted:
+    - closed
+  closed: []
+
+watch:
+  prompt_wait: true
+  settled:
+    - idle
+    - done
+    - blocked
+  grok_idle_is_not_done: true
+  require_worker_receipt_file: true
+  after_wait:
+    - agent_get
+    - agent_read
+    - git_diff
+    - receipt_file
+
+parallel:
+  require_no_file_overlap: true
+  pair: dispatcher-and-worker
+  each_workstream_own_worktree: true
+  only_volume: large
+  remove_worktree_after_merge: true
+
+agent_runtime:
+  default: off
+  use_when: Human asked for machine-evaluated Task acceptance
+  maps_to: optional wrapper around one worker prompt, not a second board
+
+discovery:
+  rules:
+    - AGENTS.md
+    - PRODUCT.md
+    - constitution.md
+    - .specify/memory/constitution.md
+  spec:
+    - specs/active
+    - specs
+    - docs/specs
+    - openspec/specs
+    - openspec
+    - .specify
+    - spec.md
+  plan:
+    - plans
+    - .planning
+    - docs/plans
+  decisions:
+    - docs/adr
+    - docs/adrs
+    - adr
+    - adrs

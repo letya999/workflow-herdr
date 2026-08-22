@@ -18,6 +18,19 @@ from yaml_lite import dump_yaml, load_yaml
 CHANGE_NAME = re.compile(r"^[a-z][a-z0-9-]{0,47}$")
 
 
+def exclude_local_runtime(project: Path) -> None:
+    git_dir = project / ".git"
+    if not git_dir.is_dir():
+        return
+    entry = "/.herdr/"
+    exclude = git_dir / "info" / "exclude"
+    exclude.parent.mkdir(parents=True, exist_ok=True)
+    existing = exclude.read_text(encoding="utf-8") if exclude.exists() else ""
+    if entry not in {line.strip() for line in existing.splitlines()}:
+        prefix = "" if not existing or existing.endswith("\n") else "\n"
+        exclude.write_text(existing + prefix + entry + "\n", encoding="utf-8")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--project", required=True)
@@ -33,6 +46,7 @@ def main() -> int:
         return 2
     config = resolve(project)
     rel = expand_layout(config, change=args.change)
+    exclude_local_runtime(project)
     needed = ("change_dir", "receipts", "session", "state")
     missing = [key for key in needed if key not in rel]
     if missing:

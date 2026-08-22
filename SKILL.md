@@ -9,11 +9,12 @@ description: >
 
 # Workflow Herdr
 
-Where a change, its plan, and its tasks live is in the YAML, not here.
-Copy the example overlay to change CLIs or models without editing this file.
+Herdr coordination lives in its own local directory. Project requirements,
+decisions, plans, and durable state stay in the systems the project already uses.
 
 - Config: [workflow.yaml](workflow.yaml)
-- Overlay example: [assets/workflow.example.yaml](assets/workflow.example.yaml)
+- Project manifest example: [assets/workflow.example.yaml](assets/workflow.example.yaml)
+- Project workflow profile: [references/project-workflow.md](references/project-workflow.md)
 - How to run: [references/run.md](references/run.md)
 
 ## Do
@@ -23,16 +24,29 @@ feedback, and authority. Repo docs are context, not the request.
 
 If this process is not a Herdr pane, stop.
 
+Before sizing, load `.herdr/project.md`. If it is missing, build it from the
+project's instructions, templates, integrations, and representative active and
+completed work using the project workflow reference. This is a short cached
+understanding, not a new methodology. A directory name alone is not evidence
+that the project uses that directory as a current source of truth.
+
+Resolve `workflow.yaml` with the optional project manifest at
+`.herdr/workflow.yaml`. The manifest overrides global roles, CLIs, volumes,
+guards, task states, and layout for this project only. Merge mappings
+recursively; replace lists and scalars. Treat the resolved result as the run
+configuration.
+
 Brain chooses exactly one size before creating topology:
 
 - small: Brain -> Worker;
 - medium: Brain -> Orchestrator -> Dispatcher -> Worker;
 - large: Brain -> Orchestrator -> worktree N -> Dispatcher N -> Worker N.
 
-Small starts work immediately. Medium and large keep intent, specification,
-plan, and implementation state distinct. Use the project's existing document
-homes. If they do not exist, keep those sections explicit in agent handoffs;
-do not create a documentation tree just for this skill.
+Small starts work immediately. Medium and large follow the profile's routing,
+artifact, lifecycle, hierarchy, and tooling rules. Keep Herdr coordination
+state separate from durable project state. If the profile says a system is not
+used, do not create it. If the workflow remains unclear, keep context in agent
+handoffs and ask before creating or changing project artifacts.
 
 Resolve blocked or missing work before sizing. Count runnable workstreams, not
 issue numbers. Before creating any pane, tab, workspace, or worktree, run the

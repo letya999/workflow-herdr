@@ -98,6 +98,10 @@ python -m unittest discover -s scripts -p "test_*.py" -v
 ```text
 workflow.yaml                 # роли, CLI, режимы и правила workflow
 SKILL.md                      # описание skill для Codex
+README.md                     # quickstart и конфигурация
+CONTRIBUTING.md               # branch flow и проверки
+SECURITY.md                   # приватное сообщение об уязвимостях
+LICENSE                       # MIT
 scripts/                      # служебные команды и тесты
 assets/                       # шаблоны состояния и project manifest
 references/run.md             # краткая инструкция запуска
@@ -105,8 +109,12 @@ references/run.md             # краткая инструкция запуск
 
 ## Безопасность
 
-Не добавляйте в репозиторий `.env`, ключи, токены, service-account JSON и другие секреты. Перед публикацией запускайте проверку секретов и статического анализа в соответствии с политикой вашего проекта.
+Не добавляйте в репозиторий `.env`, ключи, токены, service-account JSON и другие секреты. Порядок приватного сообщения об уязвимости описан в [`SECURITY.md`](SECURITY.md).
+
+## Участие в разработке
+
+Изменения проходят по цепочке `feature branch → dev → main`. Команды проверки и правила оформления находятся в [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## Лицензия
 
-Лицензия пока не задана. Если проект будет распространяться публично, добавьте подходящий файл `LICENSE`.
+Проект распространяется по лицензии [MIT](LICENSE).

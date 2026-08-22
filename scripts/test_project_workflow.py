@@ -104,6 +104,18 @@ class ProjectWorkflowTests(unittest.TestCase):
         ):
             self.assertGreaterEqual(template.count(subsection), 4)
 
+    def test_public_project_docs_define_release_and_security_policy(self) -> None:
+        root = skill_dir()
+        license_text = (root / "LICENSE").read_text(encoding="utf-8")
+        contributing = (root / "CONTRIBUTING.md").read_text(encoding="utf-8")
+        security = (root / "SECURITY.md").read_text(encoding="utf-8")
+        readme = (root / "README.md").read_text(encoding="utf-8")
+        self.assertIn("MIT License", license_text)
+        self.assertIn("feature branch -> dev -> main", contributing)
+        self.assertIn("private GitHub security advisory", security)
+        for link in ("LICENSE", "CONTRIBUTING.md", "SECURITY.md"):
+            self.assertIn(link, readme)
+
 
 if __name__ == "__main__":
     unittest.main()

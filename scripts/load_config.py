@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Resolve skill workflow.yaml plus optional project overlay. Print JSON."""
+"""Resolve global workflow.yaml plus an optional project manifest. Print JSON."""
 
 from __future__ import annotations
 
@@ -36,9 +36,10 @@ def resolve(project: Path | None) -> dict:
     data = read_yaml(root / "workflow.yaml")
     if project:
         layout = expand_layout(data, change="_")
-        overlay = Path(project) / layout.get("overlay", ".work/workflow.yaml")
-        if overlay.is_file():
-            data = deep_merge(data, read_yaml(overlay))
+        manifest_path = layout.get("manifest") or layout.get("overlay")
+        manifest = Path(project) / (manifest_path or ".herdr/workflow.yaml")
+        if manifest.is_file():
+            data = deep_merge(data, read_yaml(manifest))
     return data
 
 

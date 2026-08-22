@@ -63,9 +63,19 @@ python scripts/task_state.py --project "C:\path\to\project" --change add-login -
 
 ## Конфигурация
 
-Основная конфигурация находится в [`workflow.yaml`](workflow.yaml). Проектный overlay — `.work/workflow.yaml`; он объединяется с базовой конфигурацией и позволяет переопределить параметры конкретного проекта.
+Основная конфигурация находится в [`workflow.yaml`](workflow.yaml). Локальный manifest проекта — `.herdr/workflow.yaml`. Он глубоко объединяется с глобальной конфигурацией: словари дополняются, а локальные списки и скаляры заменяют глобальные. Через manifest можно переопределить роли, CLI, модели, volumes, guards, task states и layout только для конкретного проекта.
 
-Шаблон overlay находится в [`assets/workflow.example.yaml`](assets/workflow.example.yaml). Layout определяет расположение `.work`, change, state, run и receipts.
+Минимальный manifest конкретного проекта:
+
+```yaml
+roles:
+  worker:
+    model: project-specific-model
+guards:
+  large_min_runnable_tasks: 3
+```
+
+Шаблон manifest находится в [`assets/workflow.example.yaml`](assets/workflow.example.yaml). Layout определяет локальные `.herdr/runs`, state, run и receipts. Файл `.herdr/project.md` кратко описывает фактический workflow проекта; его формат задан в [`references/project-workflow.md`](references/project-workflow.md).
 
 Основные переходы состояния:
 
@@ -89,7 +99,7 @@ python -m unittest discover -s scripts -p "test_*.py" -v
 workflow.yaml                 # роли, CLI, режимы и правила workflow
 SKILL.md                      # описание skill для Codex
 scripts/                      # служебные команды и тесты
-assets/                       # шаблоны состояния и overlay
+assets/                       # шаблоны состояния и project manifest
 references/run.md             # краткая инструкция запуска
 ```
 

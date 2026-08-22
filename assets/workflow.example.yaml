@@ -1,11 +1,11 @@
-# Example project overlay.
-# Copy to the path in layout.overlay (see skill workflow.yaml).
-# Unlisted keys stay as in the skill YAML.
+# Project-local Herdr manifest: .herdr/workflow.yaml
+# Mapping keys merge recursively with the global workflow.yaml.
+# Scalars and lists replace their global values. Omitted keys keep defaults.
 
-# Where this project keeps coordination state:
+# Where Herdr keeps local coordination state:
 # layout:
-#   work_root: ".work"
-#   change_dir: "{work_root}/{change}"
+#   work_root: ".herdr"
+#   change_dir: "{work_root}/runs/{change}"
 #   state: "{change_dir}/state.yaml"
 
 roles:
@@ -21,3 +21,12 @@ roles:
     cli: grok
     model: grok-4.6
     effort: high
+
+# Any global section may be overridden locally. For example:
+# volumes:
+#   medium:
+#     use_when: One bounded change handled in the project workspace
+# guards:
+#   large_min_runnable_tasks: 3
+# watch:
+#   prompt_wait: false

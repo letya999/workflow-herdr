@@ -11,11 +11,24 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from init_work import exclude_local_runtime
 from workflow_guard import resolve_command, validate
 from yaml_lite import dump_yaml
 
 
 class WorkflowGuardTests(unittest.TestCase):
+    def test_local_runtime_uses_git_info_exclude(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / ".git" / "info").mkdir(parents=True)
+            exclude_local_runtime(root)
+            exclude_local_runtime(root)
+            self.assertEqual(
+                (root / ".git" / "info" / "exclude").read_text(encoding="utf-8"),
+                "/.herdr/\n",
+            )
+            self.assertFalse((root / ".gitignore").exists())
+
     def write_run(
         self,
         root: Path,
@@ -25,10 +38,10 @@ class WorkflowGuardTests(unittest.TestCase):
         active_roles: bool = False,
         pairs: int = 1,
     ) -> None:
-        change = root / ".work" / "change"
+        change = root / ".herdr" / "runs" / "change"
         change.mkdir(parents=True)
         (change / "state.yaml").write_text(dump_yaml(state), encoding="utf-8")
-        (root / ".work" / "run.json").write_text(
+        (change / "run.json").write_text(
             json.dumps(
                 {
                     "volume": volume,
@@ -258,7 +271,7 @@ class WorkflowGuardTests(unittest.TestCase):
                 check=False,
             )
             self.assertEqual(proc.returncode, 0, proc.stderr)
-            state = (root / ".work" / "change" / "state.yaml").read_text(
+            state = (root / ".herdr" / "runs" / "change" / "state.yaml").read_text(
                 encoding="utf-8"
             )
             self.assertEqual(state.count("state: blocked"), 2)
@@ -329,7 +342,7 @@ class WorkflowGuardTests(unittest.TestCase):
                     active_roles=True,
                     pairs=2,
                 )
-                receipts = root / ".work" / "change" / "receipts"
+                receipts = root / ".herdr" / "runs" / "change" / "receipts"
                 receipts.mkdir(parents=True, exist_ok=True)
                 for index, state in enumerate(states, 1):
                     if state == "accepted":

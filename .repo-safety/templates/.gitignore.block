@@ -1,0 +1,46 @@
+# secrets and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+id_rsa
+id_ed25519
+credentials.json
+credentials.*.json
+service-account*.json
+token.json
+tokens.json
+secrets.json
+*.ovpn
+
+# MCP / agent local configs that often contain tokens
+.mcp.json
+claude_desktop_config.json
+
+# agent logs / local AI context
+.claude/
+.codex/
+.cursor/
+.windsurf/
+.gemini/
+.agent/
+.ai/
+*.session
+*.transcript
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# logs / temp
+*.log
+logs/
+tmp/
+temp/
+.cache/

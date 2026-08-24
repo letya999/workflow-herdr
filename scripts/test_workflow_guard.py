@@ -104,6 +104,39 @@ class WorkflowGuardTests(unittest.TestCase):
                     resolve_command("codex"), str((root / "codex.cmd").resolve())
                 )
 
+    def test_resolver_accepts_existing_explicit_path(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            executable = Path(directory) / "agent"
+            executable.write_text("stub", encoding="utf-8")
+            self.assertEqual(resolve_command(str(executable)), str(executable.resolve()))
+
+    def test_resolver_rejects_missing_explicit_path(self) -> None:
+        self.assertIsNone(resolve_command(str(Path("missing") / "agent")))
+
+    def test_posix_resolver_uses_which(self) -> None:
+        posix_os = mock.Mock(name="posix")
+        with (
+            mock.patch("workflow_guard.os", posix_os),
+            mock.patch("workflow_guard.shutil.which", return_value="/usr/bin/codex"),
+        ):
+            self.assertEqual(resolve_command("codex"), "/usr/bin/codex")
+
+    def test_windows_resolver_accepts_only_native_explicit_suffixes(self) -> None:
+        with mock.patch("workflow_guard.shutil.which", return_value="C:/bin/codex.cmd"):
+            self.assertEqual(
+                resolve_command("codex.cmd"),
+                str(Path("C:/bin/codex.cmd").resolve()),
+            )
+        with mock.patch(
+            "workflow_guard.shutil.which", return_value="C:/bin/codex.ps1"
+        ):
+            self.assertIsNone(resolve_command("codex.ps1"))
+
+    def test_windows_resolver_returns_none_when_command_is_missing(self) -> None:
+        for path in ("", tempfile.gettempdir()):
+            with self.subTest(path=path), mock.patch.dict(os.environ, {"PATH": path}):
+                self.assertIsNone(resolve_command("missing-command"))
+
     def test_windows_launch_uses_exact_executable(self) -> None:
         with mock.patch.object(os, "name", "nt"):
             command = launch_command(
@@ -114,6 +147,17 @@ class WorkflowGuardTests(unittest.TestCase):
             command,
             "& 'C:\\Program Files\\Codex\\codex.cmd' '--model' 'gpt-5.6-sol' '--no-alt-screen'",
         )
+
+    def test_windows_launch_escapes_single_quotes(self) -> None:
+        with mock.patch.object(os, "name", "nt"):
+            command = launch_command("C:/Sam's/codex.cmd", ["it's-safe"])
+        self.assertEqual(command, "& 'C:/Sam''s/codex.cmd' 'it''s-safe'")
+
+    def test_posix_launch_quotes_shell_arguments(self) -> None:
+        posix_os = mock.Mock(name="posix")
+        with mock.patch("workflow_guard.os", posix_os):
+            command = launch_command("/opt/Codex CLI/codex", ["--model", "a'b"])
+        self.assertEqual(command, "'/opt/Codex CLI/codex' --model 'a'\"'\"'b'")
 
     def test_large_requires_two_runnable_tasks(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

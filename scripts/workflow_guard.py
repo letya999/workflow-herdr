@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shlex
 import shutil
 import sys
 from pathlib import Path
@@ -47,6 +48,14 @@ def resolve_command(command: str) -> str | None:
     return None
 
 
+def launch_command(executable: str, args: list[str]) -> str:
+    """Build the exact shell command that Herdr should send to a pane."""
+    if os.name == "nt":
+        quoted = (f"'{value.replace("'", "''")}'" for value in [executable, *args])
+        return f"& {' '.join(quoted)}"
+    return shlex.join([executable, *args])
+
+
 def preflight(project: Path, volume: str) -> dict:
     config = resolve(project)
     recipe = (config.get("volumes") or {}).get(volume)
@@ -64,7 +73,14 @@ def preflight(project: Path, volume: str) -> dict:
         if not role.get("start", True) or cli_name == "human":
             continue
         resolved = resolve_command(str(cli_name))
-        seats[seat] = {"command": cli_name, "resolved": resolved}
+        cli = (config.get("clis") or {}).get(cli_name) or {}
+        values = {"model": role.get("model"), "effort": role.get("effort")}
+        args = [str(arg).format_map(values) for arg in cli.get("native_args") or []]
+        seats[seat] = {
+            "command": cli_name,
+            "resolved": resolved,
+            "launch": launch_command(resolved, args) if resolved else None,
+        }
         if not resolved:
             errors.append(f"{seat}: no safe executable for {cli_name}")
     return {"ok": not errors, "errors": errors, "seats": seats}

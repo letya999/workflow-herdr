@@ -12,7 +12,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from init_work import exclude_local_runtime
-from workflow_guard import resolve_command, validate
+from workflow_guard import launch_command, resolve_command, validate
 from yaml_lite import dump_yaml
 
 
@@ -103,6 +103,17 @@ class WorkflowGuardTests(unittest.TestCase):
                 self.assertEqual(
                     resolve_command("codex"), str((root / "codex.cmd").resolve())
                 )
+
+    def test_windows_launch_uses_exact_executable(self) -> None:
+        with mock.patch.object(os, "name", "nt"):
+            command = launch_command(
+                r"C:\Program Files\Codex\codex.cmd",
+                ["--model", "gpt-5.6-sol", "--no-alt-screen"],
+            )
+        self.assertEqual(
+            command,
+            "& 'C:\\Program Files\\Codex\\codex.cmd' '--model' 'gpt-5.6-sol' '--no-alt-screen'",
+        )
 
     def test_large_requires_two_runnable_tasks(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

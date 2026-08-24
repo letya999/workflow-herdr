@@ -27,10 +27,13 @@ before any topology mutation:
 python scripts/workflow_guard.py preflight --project <abs> --volume <volume>
 ```
 
-On Windows this rejects extensionless npm shims. Until Herdr resolves
-herdrdev/herdr#2685, start the exact executable returned by preflight in a pane
-created by this run with `herdr pane run`; wait for Herdr to detect it, then
-assign that new agent its seat name. Never use an older pane or agent.
+Preflight returns `seats.<seat>.launch`, a complete shell command with the safe
+executable and native args. Send that value unchanged with `herdr pane run` in
+a pane created by this run. Do not rebuild it, use `Start-Process`, or replace
+the executable with a bare CLI name: Windows may select an extensionless npm
+shim that is not a Win32 application (herdrdev/herdr#2685). Wait for Herdr to
+detect the agent, then assign that new agent its seat name. Never use an older
+pane or agent.
 
 ## Volume
 

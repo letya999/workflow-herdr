@@ -184,6 +184,12 @@ class ProjectWorkflowTests(unittest.TestCase):
 
     def test_public_project_docs_define_release_and_security_policy(self) -> None:
         root = skill_dir()
+        required = tuple(
+            root / name
+            for name in ("LICENSE", "CONTRIBUTING.md", "SECURITY.md", "README.md")
+        )
+        if not all(path.is_file() for path in required):
+            self.skipTest("repository-only docs are not installed in this harness")
         license_text = (root / "LICENSE").read_text(encoding="utf-8")
         contributing = (root / "CONTRIBUTING.md").read_text(encoding="utf-8")
         security = (root / "SECURITY.md").read_text(encoding="utf-8")

@@ -46,7 +46,31 @@ class WorkflowGuardTests(unittest.TestCase):
                 {
                     "volume": volume,
                     "workspace_id": "w1" if active_roles else "",
-                    "created": {"workspaces": [], "tabs": [], "panes": []},
+                    "created": {
+                        "workspaces": [],
+                        "tabs": [],
+                        "panes": (
+                            [
+                                {"pane_id": "w1:p2", "status": "running"},
+                                *[
+                                    {
+                                        "pane_id": f"w{index}:p3",
+                                        "status": "running",
+                                    }
+                                    for index in range(1, pairs + 1)
+                                ],
+                                *[
+                                    {
+                                        "pane_id": f"w{index}:p4",
+                                        "status": "running",
+                                    }
+                                    for index in range(1, pairs + 1)
+                                ],
+                            ]
+                            if active_roles
+                            else []
+                        ),
+                    },
                     "roles": {
                         "orchestrator": {"pane_id": "w1:p2" if active_roles else ""},
                         "dispatchers": (
@@ -287,6 +311,38 @@ class WorkflowGuardTests(unittest.TestCase):
             )
             result = validate(root, "change")
             self.assertTrue(result["ok"], result["errors"])
+
+    def test_active_role_requires_running_recorded_pane(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_run(
+                root,
+                "medium",
+                {
+                    "tasks": [{"id": "task-1", "state": "running"}],
+                    "workstreams": [
+                        {
+                            "id": "stream-1",
+                            "task": "task-1",
+                            "dispatcher": "dispatcher-1",
+                            "worker": "worker-1",
+                            "state": "running",
+                        }
+                    ],
+                },
+                active_roles=True,
+            )
+            run_file = root / ".herdr" / "runs" / "change" / "run.json"
+            run = json.loads(run_file.read_text(encoding="utf-8"))
+            run["created"]["panes"] = [
+                {"pane_id": "w1:p2", "status": "failed"}
+            ]
+            run_file.write_text(json.dumps(run), encoding="utf-8")
+            result = validate(root, "change")
+            self.assertIn("pane w1:p2 is not running", result["errors"])
+            self.assertIn(
+                "pane w1:p3 is not recorded in created.panes", result["errors"]
+            )
 
     def test_task_state_keeps_workstream_in_sync(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

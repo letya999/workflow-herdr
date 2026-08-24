@@ -10,6 +10,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from load_config import expand_layout, resolve, skill_dir
+from record_pane import record_pane
 
 
 class ProjectWorkflowTests(unittest.TestCase):
@@ -104,8 +105,91 @@ class ProjectWorkflowTests(unittest.TestCase):
         ):
             self.assertGreaterEqual(template.count(subsection), 4)
 
+    def test_record_pane_upserts_resource_and_role(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            session_file = Path(directory) / "run.json"
+            session_file.write_text(
+                json.dumps({"created": {"panes": []}, "roles": {}}),
+                encoding="utf-8",
+            )
+            record_pane(
+                session_file,
+                pane_id="w1:p2",
+                seat="orchestrator",
+                number=1,
+                status="created",
+            )
+            record_pane(
+                session_file,
+                pane_id="w1:p2",
+                seat="orchestrator",
+                number=1,
+                status="failed",
+                error="startup failed",
+            )
+            run = json.loads(session_file.read_text(encoding="utf-8"))
+            self.assertEqual(
+                run["created"]["panes"],
+                [
+                    {
+                        "pane_id": "w1:p2",
+                        "seat": "orchestrator",
+                        "number": 1,
+                        "status": "failed",
+                        "error": "startup failed",
+                    }
+                ],
+            )
+            self.assertEqual(run["roles"]["orchestrator"]["pane_id"], "w1:p2")
+            self.assertEqual(run["workspace_id"], "w1")
+
+    def test_record_pane_upserts_numbered_worker_role(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            session_file = Path(directory) / "run.json"
+            session_file.write_text(
+                json.dumps({"created": {"panes": []}, "roles": {}}),
+                encoding="utf-8",
+            )
+            for status in ("created", "running"):
+                record_pane(
+                    session_file,
+                    pane_id="w1:p3",
+                    seat="worker",
+                    number=2,
+                    status=status,
+                )
+            run = json.loads(session_file.read_text(encoding="utf-8"))
+            self.assertEqual(len(run["created"]["panes"]), 1)
+            self.assertEqual(run["created"]["panes"][0]["status"], "running")
+            self.assertEqual(
+                run["roles"]["workers"],
+                [{"pane_id": "w1:p3", "agent": "worker-2"}],
+            )
+
+    def test_record_pane_rejects_a_different_workspace(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            session_file = Path(directory) / "run.json"
+            session_file.write_text(
+                json.dumps({"workspace_id": "w1", "created": {"panes": []}}),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "belongs to w2, not w1"):
+                record_pane(
+                    session_file,
+                    pane_id="w2:p1",
+                    seat="worker",
+                    number=1,
+                    status="created",
+                )
+
     def test_public_project_docs_define_release_and_security_policy(self) -> None:
         root = skill_dir()
+        required = tuple(
+            root / name
+            for name in ("LICENSE", "CONTRIBUTING.md", "SECURITY.md", "README.md")
+        )
+        if not all(path.is_file() for path in required):
+            self.skipTest("repository-only docs are not installed in this harness")
         license_text = (root / "LICENSE").read_text(encoding="utf-8")
         contributing = (root / "CONTRIBUTING.md").read_text(encoding="utf-8")
         security = (root / "SECURITY.md").read_text(encoding="utf-8")

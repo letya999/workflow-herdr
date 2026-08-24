@@ -27,10 +27,13 @@ before any topology mutation:
 python scripts/workflow_guard.py preflight --project <abs> --volume <volume>
 ```
 
-On Windows this rejects extensionless npm shims. Until Herdr resolves
-herdrdev/herdr#2685, start the exact executable returned by preflight in a pane
-created by this run with `herdr pane run`; wait for Herdr to detect it, then
-assign that new agent its seat name. Never use an older pane or agent.
+Preflight returns `seats.<seat>.launch`, a complete shell command with the safe
+executable and native args. Send that value unchanged with `herdr pane run` in
+a pane created by this run. Do not rebuild it, use `Start-Process`, or replace
+the executable with a bare CLI name: Windows may select an extensionless npm
+shim that is not a Win32 application (herdrdev/herdr#2685). Wait for Herdr to
+detect the agent, then assign that new agent its seat name. Never use an older
+pane or agent.
 
 ## Volume
 
@@ -74,7 +77,16 @@ Keep one run in the current tab; use the change as the tab label and roles as
 pane labels so the sidebar does not present every pane as another Brain.
 
 `--no-focus` on every split. Native args (including no-alt-screen) come
-from YAML `clis`. After start:
+from YAML `clis`. Immediately after each `pane split` succeeds, record the
+returned pane before any other Herdr control command:
+
+```text
+python scripts/record_pane.py --project <abs> --change <change> --seat <seat> --pane <id> --n <n> --status created
+```
+
+Stop if this write fails: an unrecorded pane cannot be safely recovered or
+cleaned up. After Herdr detects the agent, record `--status running`. If startup
+fails, record `--status failed --error "<short error>"`. Then label the pane:
 
 ```text
 python scripts/label_seat.py --project <abs> --seat worker --pane <id> --n 1
@@ -99,16 +111,17 @@ plus `blocked`. The worker does not write the board.
 python scripts/task_state.py --project <abs> --change <change> --task t1 --set in_review
 ```
 
-Record every resource created by this run in `run.json` immediately. Before a
-phase transition, validate the board and run record:
+`record_pane.py` owns pane and role entries in `run.json`; do not edit those
+entries by hand. Before a phase transition, validate the board and run record:
 
 ```text
 python scripts/workflow_guard.py validate --project <abs> --change <change>
 ```
 
-If `agent start` fails, read the pane and record the error. A pane created by
-this run may be closed only after confirming it contains no agent. Do not use
-an older idle agent as fallback.
+If agent startup fails, read the pane and pass a short error to
+`record_pane.py --status failed`. A pane created by this run may be closed only
+after confirming it contains no agent. Do not use an older idle agent as
+fallback.
 
 ## Packets
 

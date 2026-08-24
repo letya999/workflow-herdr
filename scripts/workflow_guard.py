@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shlex
 import shutil
 import sys
 from pathlib import Path
@@ -47,6 +48,14 @@ def resolve_command(command: str) -> str | None:
     return None
 
 
+def launch_command(executable: str, args: list[str]) -> str:
+    """Build the exact shell command that Herdr should send to a pane."""
+    if os.name == "nt":
+        quoted = (f"'{value.replace("'", "''")}'" for value in [executable, *args])
+        return f"& {' '.join(quoted)}"
+    return shlex.join([executable, *args])
+
+
 def preflight(project: Path, volume: str) -> dict:
     config = resolve(project)
     recipe = (config.get("volumes") or {}).get(volume)
@@ -64,7 +73,14 @@ def preflight(project: Path, volume: str) -> dict:
         if not role.get("start", True) or cli_name == "human":
             continue
         resolved = resolve_command(str(cli_name))
-        seats[seat] = {"command": cli_name, "resolved": resolved}
+        cli = (config.get("clis") or {}).get(cli_name) or {}
+        values = {"model": role.get("model"), "effort": role.get("effort")}
+        args = [str(arg).format_map(values) for arg in cli.get("native_args") or []]
+        seats[seat] = {
+            "command": cli_name,
+            "resolved": resolved,
+            "launch": launch_command(resolved, args) if resolved else None,
+        }
         if not resolved:
             errors.append(f"{seat}: no safe executable for {cli_name}")
     return {"ok": not errors, "errors": errors, "seats": seats}
@@ -87,6 +103,13 @@ def validate(project: Path, change: str) -> dict:
     created = session.get("created") or {}
     created_workspaces = created.get("workspaces") or []
     created_tabs = created.get("tabs") or []
+    created_panes = created.get("panes") or []
+    pane_status = {
+        item.get("pane_id") if isinstance(item, dict) else item: (
+            item.get("status") if isinstance(item, dict) else None
+        )
+        for item in created_panes
+    }
     roles = session.get("roles") or {}
     if volume not in (config.get("volumes") or {}):
         errors.append(f"unknown volume: {volume}")
@@ -174,6 +197,15 @@ def validate(project: Path, change: str) -> dict:
             errors.append(f"{volume} active work requires worker in run.json")
         if not session.get("workspace_id"):
             errors.append(f"{volume} active work requires workspace_id in run.json")
+        active_roles = [roles.get("orchestrator") or {}]
+        active_roles += roles.get("dispatchers") or []
+        active_roles += roles.get("workers") or []
+        for role in active_roles:
+            pane_id = role.get("pane_id")
+            if pane_id and pane_id not in pane_status:
+                errors.append(f"pane {pane_id} is not recorded in created.panes")
+            elif pane_id and pane_status[pane_id] != "running":
+                errors.append(f"pane {pane_id} is not running")
     if volume == "large":
         file_sets: list[set[str]] = []
         for stream in workstreams:

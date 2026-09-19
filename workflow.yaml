@@ -39,6 +39,14 @@ clis:
       - "--reasoning-effort"
       - "{effort}"
       - "--no-alt-screen"
+  devin:
+    herdr_kind: devin
+    native_args:
+      - "--model"
+      - "{model}"
+      - "--reasoning-effort"
+      - "{effort}"
+      - "--no-alt-screen"
 
 roles:
   brain:
@@ -54,8 +62,8 @@ roles:
     title: Orchestrator
     agent_name: orchestrator
     cli: codex
-    model: gpt-5.6-sol
-    effort: low
+    model: gpt-5.6-luna
+    effort: max
     start: true
 
   dispatcher:
@@ -70,9 +78,9 @@ roles:
   worker:
     title: Worker
     agent_name_pattern: "worker-{n}"
-    cli: grok
-    model: grok-4.6
-    effort: high
+    cli: devin
+    model: swe2
+    effort: max
     start: true
     many: true
 

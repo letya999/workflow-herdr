@@ -1,13 +1,17 @@
-# Global defaults for seats, volume recipes, CLIs, task states, and run layout.
-# A project may override them with the manifest at layout.manifest.
+# Graph-based Herdr workflow. Nodes are seats; graphs are presets.
+# A project may override nodes, harnesses, and graphs via layout.manifest.
 
 layout:
   work_root: ".herdr"
   manifest: "{work_root}/workflow.yaml"
   profile: "{work_root}/project.md"
+  detection: "{work_root}/detection.yaml"
   change_dir: "{work_root}/runs/{change}"
+  identity: "{change_dir}/identity.yaml"
   session: "{change_dir}/run.json"
-  state: "{change_dir}/state.yaml"
+  orchestration: "{change_dir}/orchestration.yaml"
+  artifacts: "{change_dir}/artifacts.yaml"
+  state: "{change_dir}/tasks.yaml"
   receipts: "{change_dir}/receipts"
   worker_receipt: "{receipts}/{task}.worker.md"
   dispatcher_receipt: "{receipts}/{task}.dispatcher.md"
@@ -18,168 +22,293 @@ visibility:
   display_agent: "{title}"
   display_agent_many: "{title} {n}"
   metadata_source: workflow-herdr
+  workspace_label: "{repo} / {change}"
+  workspace_label_stream: "{repo} / {change}/{stream}"
+  tab_label: "{change}"
+  tab_label_stream: "{change}/{stream}"
 
-clis:
+harnesses:
   human:
-    herdr_kind: null
-    native_args: []
+    kind: null
+    args: []
+    efforts: []
   codex:
-    herdr_kind: codex
-    native_args:
+    kind: codex
+    args:
       - "--model"
       - "{model}"
       - "-c"
       - "model_reasoning_effort={effort}"
       - "--no-alt-screen"
+    efforts:
+      - minimal
+      - low
+      - medium
+      - high
+      - xhigh
+      - max
+    known_models:
+      - gpt-5.6-luna
+      - gpt-5.6-sol
+      - gpt-5.4
+      - o3
   grok:
-    herdr_kind: grok
-    native_args:
+    kind: grok
+    args:
       - "--model"
       - "{model}"
       - "--reasoning-effort"
       - "{effort}"
       - "--no-alt-screen"
+    efforts:
+      - low
+      - high
+      - max
   devin:
-    herdr_kind: devin
-    native_args:
+    kind: devin
+    args:
       - "--model"
       - "{model}"
-      - "--reasoning-effort"
-      - "{effort}"
-      - "--no-alt-screen"
+    efforts:
+      - low
+      - medium
+      - high
+      - max
 
-roles:
+nodes:
   brain:
     title: Brain
-    agent_name: brain
-    cli: human
+    harness: human
     model: null
     effort: null
     start: false
+    name: null
+    owns:
+      - goal
+      - authority
     notes: This chat. Intent is what the human typed here.
 
   orchestrator:
     title: Orchestrator
-    agent_name: orchestrator
-    cli: codex
+    name: "{change}-orch"
+    harness: codex
     model: gpt-5.6-luna
     effort: max
     start: true
+    instances: 1
+    brief: assets/briefs/orchestrator.md
+    owns:
+      - plan
+      - task_list
 
   dispatcher:
     title: Dispatcher
-    agent_name_pattern: "dispatcher-{n}"
-    cli: codex
+    name: "{change}-disp-{n}"
+    harness: codex
     model: gpt-5.6-luna
     effort: high
     start: true
     many: true
+    instances: per_workstream
+    brief: assets/briefs/dispatcher.md
+    owns:
+      - task_execution
 
   worker:
     title: Worker
-    agent_name_pattern: "worker-{n}"
-    cli: devin
+    name: "{change}-w-{n}"
+    harness: devin
     model: swe2
     effort: max
     start: true
     many: true
+    instances: per_task
+    brief: assets/briefs/worker.md
+    owns:
+      - receipt
 
-# Three run sizes. Brain chooses once, before topology is created.
-volumes:
+graphs:
   small:
     use_when: One short prompt, one turn, no open design decisions
+    topology: split_in_current_tab
     project_artifacts: none
     coordination_state: false
     worktrees: false
     parallel: false
-    seats: [brain, worker]
-    sequence:
-      - id: discuss
-        owner: brain
-        gate: Intent is clear in the current chat
-      - id: execute
-        owner: worker
-        gate: Worker finished the requested change and Brain checked the result
-      - id: close
-        owner: brain
-        gate: Human said the slice is done
+    layout:
+      when: before_handoff
+      seats:
+        - worker
+      tab: keep
+      workspace: keep
+    nodes:
+      - brain
+      - worker
+    entry: brain
+    transitions:
+      - from: brain
+        to: worker
+        on: goal_ready
+      - from: worker
+        to: brain
+        on: done
 
   medium:
     use_when: One story, several files, decisions still fit one context
+    topology: split_in_current_tab
     project_artifacts: per-project-profile
     coordination_state: true
     worktrees: false
     parallel: false
-    seats: [brain, orchestrator, dispatcher, worker]
-    sequence:
-      - id: discuss
-        owner: brain
-        gate: Business intent is separated from implementation detail
-      - id: understand
-        owner: orchestrator
-        gate: Project workflow and relevant sources of truth are understood
-      - id: shape
-        owner: orchestrator
-        gate: Work is decomposed using the project profile or an explicit handoff
-      - id: dispatch
-        owner: dispatcher
-        gate: dispatcher-1 is up before worker-1 in the project cwd
-      - id: execute
-        owner: worker
-        gate: Tasks reached in_review
-      - id: review
-        owner: dispatcher
-        gate: Tasks accepted or rejected
-      - id: close
-        owner: brain
-        gate: Human said the slice is done
+    layout:
+      when: before_handoff
+      seats:
+        - orchestrator
+        - dispatcher
+        - worker
+      tab: rename
+      workspace: keep
+    nodes:
+      - brain
+      - orchestrator
+      - dispatcher
+      - worker
+    entry: brain
+    transitions:
+      - from: brain
+        to: orchestrator
+        on: goal_created
+      - from: orchestrator
+        to: dispatcher
+        on: task_ready
+      - from: dispatcher
+        to: worker
+        on: assigned
+      - from: worker
+        to: dispatcher
+        on: progress
+        loop: true
+      - from: worker
+        to: dispatcher
+        on: completed
+      - from: worker
+        to: dispatcher
+        on: blocked
+      - from: dispatcher
+        to: worker
+        on: correction
+        loop: true
+      - from: dispatcher
+        to: orchestrator
+        on: accepted
+      - from: dispatcher
+        to: orchestrator
+        on: rejected
+      - from: dispatcher
+        to: orchestrator
+        on: blocked
+      - from: orchestrator
+        to: dispatcher
+        on: next_task
+      - from: orchestrator
+        to: dispatcher
+        on: plan_revised
+      - from: orchestrator
+        to: dispatcher
+        on: new_plan
+      - from: orchestrator
+        to: brain
+        on: need_human
+      - from: orchestrator
+        to: brain
+        on: plan_closed
 
   large:
     use_when: Two or more runnable workstreams with non-overlapping file boundaries
+    topology: worktree_workspace_per_stream
     project_artifacts: per-project-profile
     coordination_state: true
     worktrees: true
     parallel: true
-    seats: [brain, orchestrator, dispatcher, worker]
-    sequence:
-      - id: discuss
-        owner: brain
-        gate: Business intent is separated from implementation detail
-      - id: understand
-        owner: orchestrator
-        gate: Project workflow and relevant sources of truth are understood
-      - id: size
-        owner: orchestrator
-        gate: Orchestrator defined independent workstreams and file sets
-      - id: shape
-        owner: orchestrator
-        gate: Workstreams and boundaries follow the project profile or an explicit handoff
-      - id: dispatch
-        owner: dispatcher
-        gate: Each worktree has dispatcher-N up before worker-N
-      - id: execute
-        owner: worker
-        gate: Tasks reached in_review
-      - id: review
-        owner: dispatcher
-        gate: Tasks accepted or rejected
-      - id: merge
-        owner: brain
-        gate: Streams merged to the source branch
-      - id: cleanup
-        owner: brain
-        gate: herdr worktree remove ran for every stream worktree
-      - id: close
-        owner: brain
-        gate: Human said the slice is done
+    layout:
+      when: before_handoff
+      seats:
+        - orchestrator
+        - dispatcher
+        - worker
+      tab: rename
+      workspace: worktree
+    nodes:
+      - brain
+      - orchestrator
+      - dispatcher
+      - worker
+    entry: brain
+    transitions:
+      - from: brain
+        to: orchestrator
+        on: goal_created
+      - from: orchestrator
+        to: dispatcher
+        on: task_ready
+      - from: dispatcher
+        to: worker
+        on: assigned
+      - from: worker
+        to: dispatcher
+        on: progress
+        loop: true
+      - from: worker
+        to: dispatcher
+        on: completed
+      - from: worker
+        to: dispatcher
+        on: blocked
+      - from: dispatcher
+        to: worker
+        on: correction
+        loop: true
+      - from: dispatcher
+        to: orchestrator
+        on: accepted
+      - from: dispatcher
+        to: orchestrator
+        on: rejected
+      - from: dispatcher
+        to: orchestrator
+        on: blocked
+      - from: orchestrator
+        to: dispatcher
+        on: next_task
+      - from: orchestrator
+        to: dispatcher
+        on: plan_revised
+      - from: orchestrator
+        to: dispatcher
+        on: new_plan
+      - from: orchestrator
+        to: brain
+        on: need_human
+      - from: orchestrator
+        to: brain
+        on: plan_closed
 
 guards:
   size_after_scope_resolution: true
   large_min_runnable_tasks: 2
   preflight_before_topology: true
-  forbid_existing_agent_reuse: true
+  forbid_existing_agent_reuse: false
   dispatcher_start: before_worker
   run_file_tracks_created_resources: true
+  pin_herdr_session: true
+  unique_agent_names: true
+  require_plan_before_dispatch: true
+  brain_does_not_wait: true
+  focus_live_agent: true
+  doctor_before_size: true
+  require_live_inventory: true
+  require_detection: true
+  require_sizing_reason: true
 
 task_states:
   pending: Listed, dependencies not satisfied
@@ -222,6 +351,14 @@ task_transitions:
 
 watch:
   prompt_wait: true
+  timeout_ms: 120000
+  worker_timeout_ms: 1200000
+  dispatcher_timeout_ms: 1200000
+  start_timeout_ms: 180000
+  first_prompt_timeout_ms: 15000
+  trust_timeout_ms: 20000
+  busy_retries: 8
+  stalled_retries: 3
   settled:
     - idle
     - done
@@ -241,7 +378,27 @@ parallel:
   only_volume: large
   remove_worktree_after_merge: true
 
-agent_runtime:
-  default: off
-  use_when: Human asked for machine-evaluated Task acceptance
-  maps_to: optional wrapper around one worker prompt, not a second board
+discovery:
+  instructions:
+    - AGENTS.md
+    - CLAUDE.md
+    - CONTRIBUTING.md
+    - README.md
+  requirements:
+    - openspec
+    - specs
+    - .specify
+    - docs/requirements
+  adr:
+    - docs/adr
+    - adr
+    - docs/decisions
+    - openspec/architecture
+  plans:
+    - openspec/changes
+    - plans
+    - docs/plans
+    - .cursor/plans
+  state:
+    - .beads
+    - docs/state

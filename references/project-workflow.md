@@ -14,6 +14,10 @@ Keep `.herdr/` local through `.git/info/exclude`; `init_work.py` adds this entry
 idempotently. Change that policy only when the project explicitly adopts a
 shared profile. Do not modify the project's `.gitignore` during initialization.
 
+Candidate paths come from YAML `discovery` via `scripts/discover.py`. Treat a
+hit as a clue until the profile confirms the system is current. Record
+`Not used` when a system is absent.
+
 ```markdown
 ---
 updated: YYYY-MM-DD

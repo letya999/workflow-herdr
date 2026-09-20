@@ -1,18 +1,22 @@
 # Workflow Herdr
 
-YAML-конфигурируемый workflow для координации задач разработки между человеком и AI-агентами в Herdr.
+YAML-граф для координации человека и AI-агентов **внутри Herdr**.
 
-Проект задаёт роли, порядок работы, правила для worktree и состояния задач. Логика вынесена в небольшие Python-скрипты без внешних зависимостей.
+Рантайм — сессии, вкладки, pane id и живые имена агентов. Python-скрипты
+пишут файлы, проверяют инварианты и стартуют seat. Отдельного runner, демона
+и шины событий нет.
 
 ## Что внутри
 
-- три режима работы: `small`, `medium` и `large`;
-- роли `Brain`, `Orchestrator`, `Dispatcher` и `Worker`;
-- YAML-конфигурация CLI, моделей, ролей и layout рабочих артефактов;
-- проверки preflight до создания topology;
-- валидация состояния задач и соответствия workstream/run.json;
-- поддержка средних workflow в текущем workspace и больших workflow в отдельных worktree;
-- минимальный YAML-парсер, чтобы запускать служебные скрипты без установки пакетов.
+- графы `small`, `medium`, `large` (и любые overlay-графы из узлов YAML);
+- узлы `Brain`, `Orchestrator`, `Dispatcher`, `Worker`;
+- слои стейта: продукт Herdr, глобальный индекс, overlay проекта, run
+  (`identity`, `run.json`, `orchestration`, `artifacts`, `tasks`);
+- preflight CLI / kind / model / effort / usage до любой topology;
+- `doctor` и `status` (mapped / orphan);
+- focus-or-start с retry `agent_pane_busy` / `agent_prompt_stalled` и rollback;
+- medium в текущем workspace (rename tab/pane), large — labeled worktree;
+- цикл BODW: Dispatcher крутит Worker через `prompt --wait`, Brain не ждёт.
 
 ## Быстрый старт
 
@@ -21,100 +25,101 @@ YAML-конфигурируемый workflow для координации за�
 - Python 3.10 или новее;
 - Git;
 - установленный Herdr;
-- CLI, указанные в `workflow.yaml` для выбранных ролей: Codex и Grok.
+- CLI из `workflow.yaml`: Codex (Orchestrator/Dispatcher) и Devin (Worker).
 
 ### Установка skill
-
-После публикации склонируйте репозиторий в каталог skills Codex:
 
 ```powershell
 git clone https://github.com/letya999/workflow-herdr.git "$env:USERPROFILE\.codex\skills\workflow-herdr"
 ```
 
-Для локальной проверки можно запускать команды прямо из клона.
+Скопируйте тот же каталог в `$env:USERPROFILE\.agents\skills\workflow-herdr` и
+`$env:USERPROFILE\.grok\skills\workflow-herdr`, если этими харнессами пользуетесь.
 
 ### Проверка проекта
 
-Из корня целевого проекта выполните preflight для нужного режима:
-
 ```powershell
-python scripts/workflow_guard.py preflight --project "C:\path\to\project" --volume small
+python scripts/bootstrap.py --project "C:\path\to\project"
 ```
 
-Результат — JSON с полем `ok`. Для `medium` и `large` preflight также проверяет ограничения workspace, worktree и наличие необходимых CLI.
+Результат — JSON с полем `ok`.
 
 ### Запуск workflow
 
-Для короткой задачи достаточно передать intent worker-агенту в текущем Herdr workspace. Для задач с планом создайте change:
+Короткая задача: Brain отдаёт intent одному Worker в текущем tab, без
+`--wait` на стороне Brain.
+
+Для задачи с планом:
 
 ```powershell
-python scripts/workflow_guard.py preflight --project "C:\path\to\project" --volume medium
+python scripts/bootstrap.py --project "C:\path\to\project"
 python scripts/init_work.py --project "C:\path\to\project" --change add-login --volume medium
-python scripts/load_config.py --project "C:\path\to\project" --change add-login --paths
-```
-
-Состояние workflow можно посмотреть так:
-
-```powershell
+python scripts/layout_graph.py --project "C:\path\to\project" --change add-login --volume medium
+python scripts/prompt_seat.py --project "C:\path\to\project" --change add-login --seat orchestrator --from brain --text "intent"
+python scripts/orchestrate.py --project "C:\path\to\project" --change add-login --from brain --on goal_created
 python scripts/task_state.py --project "C:\path\to\project" --change add-login --dump
 ```
 
-Для большого workflow используйте `--volume large`: он требует минимум два независимых workstream с непересекающимися границами файлов.
+`large` требует минимум два независимых workstream с непересекающимися
+файлами и по labeled worktree на поток.
 
 ## Конфигурация
 
-Основная конфигурация находится в [`workflow.yaml`](workflow.yaml). Локальный manifest проекта — `.herdr/workflow.yaml`. Он глубоко объединяется с глобальной конфигурацией: словари дополняются, а локальные списки и скаляры заменяют глобальные. Через manifest можно переопределить роли, CLI, модели, volumes, guards, task states и layout только для конкретного проекта.
+Канон — [`workflow.yaml`](workflow.yaml): `harnesses`, `nodes`, `graphs`.
+Локальный manifest `.herdr/workflow.yaml` глубоко мержится: словари
+дополняются, списки и скаляры заменяются. Старые ключи `roles` / `volumes` /
+`clis` по-прежнему принимаются и нормализуются.
 
-Минимальный manifest конкретного проекта:
+Минимальный overlay:
 
 ```yaml
-roles:
+nodes:
   worker:
-    model: project-specific-model
+    harness: grok
+    model: grok-4.6
+    effort: high
 guards:
   large_min_runnable_tasks: 3
 ```
 
-Шаблон manifest находится в [`assets/workflow.example.yaml`](assets/workflow.example.yaml). Layout определяет локальные `.herdr/runs`, state, run и receipts. Файл `.herdr/project.md` кратко описывает фактический workflow проекта; его формат задан в [`references/project-workflow.md`](references/project-workflow.md).
+Шаблон: [`assets/workflow.example.yaml`](assets/workflow.example.yaml).
+Профиль проекта: [`references/project-workflow.md`](references/project-workflow.md).
+Как гонять цикл: [`references/run.md`](references/run.md).
 
-Основные переходы состояния:
+Основные переходы задачи:
 
 ```text
 pending → ready → assigned → running → in_review → accepted → closed
 ```
 
-Состояние `blocked` используется для остановки задачи до получения внешнего решения или недостающего факта.
+`blocked` — стоп до факта или решения человека.
 
 ## Проверка
-
-Запустите тесты из корня репозитория:
 
 ```powershell
 python -m unittest discover -s scripts -p "test_*.py" -v
 ```
 
-## Структура проекта
+## Структура
 
 ```text
-workflow.yaml                 # роли, CLI, режимы и правила workflow
-SKILL.md                      # описание skill для Codex
-README.md                     # quickstart и конфигурация
-CONTRIBUTING.md               # branch flow и проверки
-SECURITY.md                   # приватное сообщение об уязвимостях
-LICENSE                       # MIT
-scripts/                      # служебные команды и тесты
-assets/                       # шаблоны состояния и project manifest
-references/run.md             # краткая инструкция запуска
+workflow.yaml                 # harnesses, nodes, graphs, guards
+SKILL.md                      # skill для харнесса
+README.md                     # quickstart
+scripts/                      # file helpers, start_seat, tests
+assets/                       # шаблоны run-файлов
+references/run.md             # контракт запуска и BODW-цикла
 ```
 
 ## Безопасность
 
-Не добавляйте в репозиторий `.env`, ключи, токены, service-account JSON и другие секреты. Порядок приватного сообщения об уязвимости описан в [`SECURITY.md`](SECURITY.md).
+Не добавляйте в репозиторий `.env`, ключи, токены, service-account JSON.
+Порядок сообщения об уязвимости: [`SECURITY.md`](SECURITY.md).
 
-## Участие в разработке
+## Участие
 
-Изменения проходят по цепочке `feature branch → dev → main`. Команды проверки и правила оформления находятся в [`CONTRIBUTING.md`](CONTRIBUTING.md).
+`feature branch → dev → main`. Подробности в [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## Лицензия
 
-Проект распространяется по лицензии [MIT](LICENSE).
+[MIT](LICENSE).

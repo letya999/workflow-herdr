@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
-
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from load_config import expand_layout, resolve, skill_dir
@@ -19,9 +19,13 @@ class ProjectWorkflowTests(unittest.TestCase):
         paths = expand_layout(config, change="change-1", task="task-1")
         self.assertEqual(paths["manifest"], ".herdr/workflow.yaml")
         self.assertEqual(paths["profile"], ".herdr/project.md")
+        self.assertEqual(paths["detection"], ".herdr/detection.yaml")
         self.assertEqual(paths["change_dir"], ".herdr/runs/change-1")
         self.assertEqual(paths["session"], ".herdr/runs/change-1/run.json")
-        self.assertNotIn("discovery", config)
+        self.assertEqual(paths["identity"], ".herdr/runs/change-1/identity.yaml")
+        self.assertEqual(paths["state"], ".herdr/runs/change-1/tasks.yaml")
+        self.assertIn("discovery", config)
+        self.assertIn("adr", config["discovery"])
         for volume in config["volumes"].values():
             self.assertNotIn("spec", volume)
             self.assertNotIn("adr", volume)
@@ -43,14 +47,19 @@ class ProjectWorkflowTests(unittest.TestCase):
             )
             config = resolve(root)
             self.assertEqual(config["roles"]["worker"]["model"], "project-worker")
-            self.assertEqual(config["roles"]["worker"]["cli"], "grok")
+            self.assertEqual(config["nodes"]["worker"]["model"], "project-worker")
+            self.assertEqual(config["roles"]["worker"]["cli"], "devin")
             self.assertEqual(config["volumes"]["medium"]["seats"], ["brain", "worker"])
+            self.assertEqual(config["graphs"]["medium"]["nodes"], ["brain", "worker"])
             self.assertIn("sequence", config["volumes"]["medium"])
 
     def test_init_work_creates_only_local_herdr_runtime(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / ".git" / "info").mkdir(parents=True)
+            index = Path(directory) / "index.yaml"
+            env = os.environ.copy()
+            env["WORKFLOW_HERDR_INDEX"] = str(index)
             proc = subprocess.run(
                 [
                     sys.executable,
@@ -65,14 +74,19 @@ class ProjectWorkflowTests(unittest.TestCase):
                 capture_output=True,
                 text=True,
                 check=False,
+                env=env,
             )
             self.assertEqual(proc.returncode, 0, proc.stderr)
             change = root / ".herdr" / "runs" / "change-1"
-            self.assertTrue((change / "state.yaml").is_file())
+            self.assertTrue((change / "tasks.yaml").is_file())
+            self.assertTrue((change / "identity.yaml").is_file())
+            self.assertTrue((change / "orchestration.yaml").is_file())
+            self.assertTrue((change / "artifacts.yaml").is_file())
             self.assertTrue((change / "receipts").is_dir())
             run = json.loads((change / "run.json").read_text(encoding="utf-8"))
             self.assertEqual(run["change"], "change-1")
             self.assertEqual(run["volume"], "medium")
+            self.assertEqual(run["herdr_session"], "default")
             self.assertFalse((root / ".work").exists())
             self.assertFalse((root / ".gitignore").exists())
             self.assertEqual(
@@ -109,7 +123,7 @@ class ProjectWorkflowTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             session_file = Path(directory) / "run.json"
             session_file.write_text(
-                json.dumps({"created": {"panes": []}, "roles": {}}),
+                json.dumps({"created": {"panes": []}, "roles": {}, "change": "c1"}),
                 encoding="utf-8",
             )
             record_pane(
@@ -118,6 +132,7 @@ class ProjectWorkflowTests(unittest.TestCase):
                 seat="orchestrator",
                 number=1,
                 status="created",
+                change="c1",
             )
             record_pane(
                 session_file,
@@ -126,28 +141,22 @@ class ProjectWorkflowTests(unittest.TestCase):
                 number=1,
                 status="failed",
                 error="startup failed",
+                change="c1",
             )
             run = json.loads(session_file.read_text(encoding="utf-8"))
-            self.assertEqual(
-                run["created"]["panes"],
-                [
-                    {
-                        "pane_id": "w1:p2",
-                        "seat": "orchestrator",
-                        "number": 1,
-                        "status": "failed",
-                        "error": "startup failed",
-                    }
-                ],
-            )
+            self.assertEqual(run["created"]["panes"][0]["pane_id"], "w1:p2")
+            self.assertEqual(run["created"]["panes"][0]["status"], "failed")
+            self.assertEqual(run["created"]["panes"][0]["error"], "startup failed")
+            self.assertEqual(run["created"]["panes"][0]["agent"], "c1-orch")
             self.assertEqual(run["roles"]["orchestrator"]["pane_id"], "w1:p2")
+            self.assertEqual(run["nodes"]["orchestrator"]["pane_id"], "w1:p2")
             self.assertEqual(run["workspace_id"], "w1")
 
     def test_record_pane_upserts_numbered_worker_role(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             session_file = Path(directory) / "run.json"
             session_file.write_text(
-                json.dumps({"created": {"panes": []}, "roles": {}}),
+                json.dumps({"created": {"panes": []}, "roles": {}, "change": "c1"}),
                 encoding="utf-8",
             )
             for status in ("created", "running"):
@@ -157,14 +166,16 @@ class ProjectWorkflowTests(unittest.TestCase):
                     seat="worker",
                     number=2,
                     status=status,
+                    change="c1",
                 )
             run = json.loads(session_file.read_text(encoding="utf-8"))
             self.assertEqual(len(run["created"]["panes"]), 1)
             self.assertEqual(run["created"]["panes"][0]["status"], "running")
             self.assertEqual(
                 run["roles"]["workers"],
-                [{"pane_id": "w1:p3", "agent": "worker-2"}],
+                [{"pane_id": "w1:p3", "agent": "c1-w-2", "tab_id": "w1:t1"}],
             )
+            self.assertEqual(run["nodes"]["worker"][0]["agent"], "c1-w-2")
 
     def test_record_pane_rejects_a_different_workspace(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -181,6 +192,66 @@ class ProjectWorkflowTests(unittest.TestCase):
                     number=1,
                     status="created",
                 )
+
+    def test_record_pane_tracks_previous_pane_after_move(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            session_file = Path(directory) / "run.json"
+            session_file.write_text(
+                json.dumps({"created": {"panes": []}, "roles": {}, "change": "c1"}),
+                encoding="utf-8",
+            )
+            record_pane(
+                session_file,
+                pane_id="w1:p2",
+                seat="dispatcher",
+                number=1,
+                status="running",
+                change="c1",
+            )
+            record_pane(
+                session_file,
+                pane_id="w2:p9",
+                seat="dispatcher",
+                number=1,
+                status="running",
+                change="c1",
+                previous_pane_id="w1:p2",
+                tab_id="w2:t1",
+            )
+            run = json.loads(session_file.read_text(encoding="utf-8"))
+            self.assertEqual(len(run["created"]["panes"]), 1)
+            self.assertEqual(run["created"]["panes"][0]["pane_id"], "w2:p9")
+            self.assertEqual(run["created"]["panes"][0]["previous_pane_id"], "w1:p2")
+
+    def test_record_pane_replaces_same_agent_on_new_pane(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            session_file = Path(directory) / "run.json"
+            session_file.write_text(
+                json.dumps({"created": {"panes": []}, "roles": {}, "change": "c1"}),
+                encoding="utf-8",
+            )
+            record_pane(
+                session_file,
+                pane_id="w1:pA",
+                seat="worker",
+                number=1,
+                status="created",
+                change="c1",
+            )
+            record_pane(
+                session_file,
+                pane_id="w1:pC",
+                seat="worker",
+                number=1,
+                status="running",
+                change="c1",
+            )
+            run = json.loads(session_file.read_text(encoding="utf-8"))
+            self.assertEqual(len(run["created"]["panes"]), 1)
+            self.assertEqual(run["created"]["panes"][0]["pane_id"], "w1:pC")
+            self.assertEqual(run["created"]["panes"][0]["previous_pane_id"], "w1:pA")
+            self.assertEqual(run["created"]["panes"][0]["status"], "running")
+            self.assertEqual(run["nodes"]["worker"][0]["pane_id"], "w1:pC")
 
     def test_public_project_docs_define_release_and_security_policy(self) -> None:
         root = skill_dir()

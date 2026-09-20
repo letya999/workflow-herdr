@@ -100,7 +100,7 @@ class ProbeTests(unittest.TestCase):
         )
         self.assertFalse(result["ok"])
         self.assertTrue(any("no kind devin" in item for item in result["errors"]))
-        self.assertTrue(any("model swe2 is not in devin inventory" in item for item in result["errors"]))
+        self.assertTrue(any("model swe-2-high is not in devin inventory" in item for item in result["errors"]))
 
     def test_probe_accepts_live_inventory(self) -> None:
         config = resolve(None)
@@ -115,7 +115,7 @@ class ProbeTests(unittest.TestCase):
                     "efforts_live": ["high", "max"],
                 },
                 "devin": {
-                    "ids": ["swe-2-max"],
+                    "ids": ["swe-2-high"],
                     "aliases": ["swe", "swe-2"],
                     "efforts_live": ["low", "medium", "high", "max"],
                 },
@@ -136,9 +136,9 @@ class ProbeTests(unittest.TestCase):
                     "efforts_live": ["high", "max"],
                 },
                 "devin": {
-                    "ids": ["swe-2-max"],
+                    "ids": ["swe-2-high"],
                     "aliases": ["swe-2"],
-                    "efforts_live": ["max"],
+                    "efforts_live": ["high", "max"],
                 },
             }
             with mock.patch("workflow_guard.resolve_command", return_value="C:/herdr.exe"):
@@ -317,7 +317,7 @@ class ProbeTests(unittest.TestCase):
             env = {"HERDR_ENV": "1"}
             inventories = {
                 "codex": {"ids": ["gpt-5.6-luna"], "aliases": [], "efforts_live": ["max"]},
-                "devin": {"ids": ["swe-2-max"], "aliases": ["swe-2"], "efforts_live": ["max"]},
+                "devin": {"ids": ["swe-2-high"], "aliases": ["swe-2"], "efforts_live": ["high", "max"]},
             }
             with mock.patch("workflow_guard.resolve_command", return_value="C:/herdr.exe"):
                 result = doctor(

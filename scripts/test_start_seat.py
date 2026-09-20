@@ -174,6 +174,8 @@ class StartSeatTests(unittest.TestCase):
         brief_arg = next(part for part in starts[-1] if "You are Dispatcher" in part)
         self.assertNotIn("\n", brief_arg)
         self.assertNotIn("'", brief_arg)
+        brief_index = starts[-1].index(brief_arg)
+        self.assertEqual(starts[-1][brief_index - 3:brief_index], ["--model", "swe-2-high", "--"])
         self.assertTrue((self.root / ".herdr" / "runs" / "login" / "briefs" / "dispatcher.md").is_file())
         self.assertFalse(any(_cmd(call)[:2] == ["agent", "prompt"] for call in fake.calls))
         self.assertEqual(fake.closed, [])

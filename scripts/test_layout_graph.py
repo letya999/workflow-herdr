@@ -116,7 +116,7 @@ class LayoutGraphTests(unittest.TestCase):
         kinds = []
         for call in starts:
             kinds.append(call[call.index("--kind") + 1])
-        self.assertEqual(kinds, ["codex", "codex", "devin"])
+        self.assertEqual(kinds, ["codex", "devin", "devin"])
         starts = [call for call in fake.calls if call[:2] == ["agent", "start"]]
         self.assertTrue(any("You are Orchestrator" in part for call in starts for part in call))
         self.assertFalse(any(call[:2] == ["agent", "prompt"] for call in fake.calls))
@@ -179,7 +179,7 @@ class LayoutGraphTests(unittest.TestCase):
             ["login-orch", "login-disp-1", "login-w-1", "login-disp-2", "login-w-2"],
         )
         kinds = [call[call.index("--kind") + 1] for call in starts]
-        self.assertEqual(kinds, ["codex", "codex", "devin", "codex", "devin"])
+        self.assertEqual(kinds, ["codex", "devin", "devin", "devin", "devin"])
         creates = [call for call in fake.calls if call[:2] == ["worktree", "create"]]
         self.assertEqual(len(creates), 2)
         self.assertTrue(any("login/auth" in call for call in creates))

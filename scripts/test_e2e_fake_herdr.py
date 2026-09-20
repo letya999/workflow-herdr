@@ -90,7 +90,7 @@ INVENTORIES = {
         "health": "ok",
     },
     "devin": {
-        "ids": ["swe-2-max"],
+        "ids": ["swe-2-high", "swe-2-max"],
         "aliases": ["swe", "swe-2"],
         "efforts_live": ["low", "medium", "high", "max"],
         "health": "ok",
@@ -201,7 +201,7 @@ class FakeHerdrE2ETests(unittest.TestCase):
         self.assertEqual(len(layout["seats"]), 3)
         starts = [call for call in fake.calls if call[:2] == ["agent", "start"]]
         kinds = [call[call.index("--kind") + 1] for call in starts]
-        self.assertEqual(kinds, ["codex", "codex", "devin"])
+        self.assertEqual(kinds, ["codex", "devin", "devin"])
 
         handoff = advance(self.root, "login", "brain", "goal_created")
         self.assertEqual(handoff["to"], ["orchestrator"])

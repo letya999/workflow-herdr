@@ -95,8 +95,8 @@ back. Do not hand-type splits. Do not `pane run`. Do not `agent prompt --wait`
 immediately after start.
 
 `agent start` uses `--timeout` from `watch.start_timeout_ms` (default 180s).
-Devin only gets `--model`; extra flags like `--no-alt-screen` prevent Herdr
-from detecting it.
+Devin gets its concrete `--model` plus the `--` prompt terminator; do not add
+unsupported flags like `--no-alt-screen`, which prevent Herdr from detecting it.
 
 ## How to test
 

@@ -25,7 +25,7 @@ YAML-граф для координации человека и AI-агенто�
 - Python 3.10 или новее;
 - Git;
 - установленный Herdr;
-- CLI из `workflow.yaml`: Codex (Orchestrator/Dispatcher) и Devin (Worker).
+- CLI из `workflow.yaml`: Codex (Orchestrator) и Devin (Dispatcher/Worker).
 
 ### Установка skill
 

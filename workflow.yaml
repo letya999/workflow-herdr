@@ -69,6 +69,7 @@ harnesses:
     args:
       - "--model"
       - "{model}"
+      - "--"
     efforts:
       - low
       - medium
@@ -104,8 +105,8 @@ nodes:
   dispatcher:
     title: Dispatcher
     name: "{change}-disp-{n}"
-    harness: codex
-    model: gpt-5.6-luna
+    harness: devin
+    model: swe-2-high
     effort: high
     start: true
     many: true
@@ -118,8 +119,8 @@ nodes:
     title: Worker
     name: "{change}-w-{n}"
     harness: devin
-    model: swe2
-    effort: max
+    model: swe-2-high
+    effort: high
     start: true
     many: true
     instances: per_task

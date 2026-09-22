@@ -1,0 +1,14 @@
+# Default arguments for Grok. Values support {model}, {effort}, {n}, and {change}.
+args:
+  - "--model"
+  - "{model}"
+  - "--reasoning-effort"
+  - "{effort}"
+  - "--no-alt-screen"
+
+# Add a model here only when it needs different arguments from the default.
+# models:
+#   model-id:
+#     args:
+#       - "--model"
+#       - "{model}"

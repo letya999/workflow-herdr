@@ -1,66 +1,133 @@
 #!/usr/bin/env python3
-"""Apply the YAML title to a Herdr pane so the sidebar shows the full name."""
+"""Rename pane, tab, and workspace so the sidebar shows the seat, not Brain."""
 
 from __future__ import annotations
 
 import argparse
 import json
-import subprocess
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from load_config import agent_name, display_agent, pane_label, resolve
+from herdr_cli import HerdrError, herdr
+from load_config import (
+    agent_name,
+    display_agent,
+    pane_label,
+    resolve,
+    tab_label,
+    workspace_label,
+)
+from run_store import load_identity
 
 
-def herdr(args: list[str]) -> None:
-    proc = subprocess.run(["herdr", *args], capture_output=True, text=True)
-    if proc.returncode != 0:
-        sys.stderr.write(proc.stderr or proc.stdout)
-        raise SystemExit(proc.returncode or 1)
-
-
-def main() -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--project", default="")
-    parser.add_argument("--seat", required=True)
-    parser.add_argument("--pane", required=True)
-    parser.add_argument("--n", type=int, default=1)
-    args = parser.parse_args()
-    project = Path(args.project) if args.project else None
-    config = resolve(project)
-    if args.seat not in config.get("roles", {}):
-        print(f"error: unknown seat {args.seat}", file=sys.stderr)
-        return 2
-    label = pane_label(config, args.seat, args.n)
-    shown = display_agent(config, args.seat, args.n)
+def label_seat(
+    *,
+    project: Path,
+    change: str,
+    seat: str,
+    pane_id: str,
+    number: int = 1,
+    stream: str = "",
+    tab_id: str = "",
+    workspace_id: str = "",
+    runner=None,
+    config: dict | None = None,
+) -> dict:
+    config = config or resolve(project)
+    nodes = config.get("nodes") or config.get("roles") or {}
+    if seat not in nodes:
+        raise HerdrError(f"unknown seat {seat}", "unknown_seat")
+    identity = load_identity(project, change, config)
+    session = identity.get("herdr_session")
+    machine = identity.get("machine")
     vis = config.get("visibility") or {}
     source = vis.get("metadata_source") or "workflow-herdr"
-    herdr(["pane", "rename", args.pane, label])
+    pane = pane_label(config, seat, number, change)
+    shown = display_agent(config, seat, number, change)
+    herdr(
+        ["pane", "rename", pane_id, pane],
+        session=session,
+        machine=machine,
+        runner=runner,
+    )
     herdr(
         [
             "pane",
             "report-metadata",
-            args.pane,
+            pane_id,
             "--source",
             source,
             "--display-agent",
             shown,
             "--title",
-            label,
-        ]
+            pane,
+        ],
+        session=session,
+        machine=machine,
+        runner=runner,
     )
-    json.dump(
-        {
-            "pane_id": args.pane,
-            "agent_name": agent_name(config, args.seat, args.n),
-            "pane_label": label,
-            "display_agent": shown,
-        },
-        sys.stdout,
-        indent=2,
-    )
+    tab_id = tab_id or identity.get("tab_id") or ""
+    tab_name = ""
+    if tab_id:
+        tab_name = tab_label(config, change=change, stream=stream)
+        herdr(
+            ["tab", "rename", tab_id, tab_name],
+            session=session,
+            machine=machine,
+            runner=runner,
+        )
+    workspace_id = workspace_id or identity.get("workspace_id") or ""
+    workspace_name = ""
+    if workspace_id and stream:
+        workspace_name = workspace_label(
+            config,
+            repo=identity.get("repo") or project.name,
+            change=change,
+            stream=stream,
+        )
+        herdr(
+            ["workspace", "rename", workspace_id, workspace_name],
+            session=session,
+            machine=machine,
+            runner=runner,
+        )
+    return {
+        "pane_id": pane_id,
+        "agent_name": agent_name(config, seat, number, change),
+        "pane_label": pane,
+        "display_agent": shown,
+        "tab_id": tab_id or None,
+        "tab_label": tab_name or None,
+        "workspace_id": workspace_id or None,
+        "workspace_label": workspace_name or None,
+    }
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--project", required=True)
+    parser.add_argument("--change", required=True)
+    parser.add_argument("--seat", required=True)
+    parser.add_argument("--pane", required=True)
+    parser.add_argument("--n", type=int, default=1)
+    parser.add_argument("--stream", default="")
+    args = parser.parse_args()
+    project = Path(args.project).resolve()
+    try:
+        result = label_seat(
+            project=project,
+            change=args.change,
+            seat=args.seat,
+            pane_id=args.pane,
+            number=args.n,
+            stream=args.stream,
+        )
+    except HerdrError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    json.dump(result, sys.stdout, indent=2)
     sys.stdout.write("\n")
     return 0
 

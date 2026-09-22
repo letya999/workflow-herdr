@@ -1,14 +1,18 @@
 {
   "change": "",
   "volume": "",
-  "phase": "discuss",
+  "graph": "",
   "project": ".",
-  "homes": {},
+  "herdr_session": "default",
+  "machine": "local",
   "workspace_id": "",
+  "tab_id": "",
+  "homes": {},
   "created": { "workspaces": [], "tabs": [], "panes": [] },
+  "nodes": {},
   "roles": {
     "brain": { "pane_id": "", "agent": null, "title": "Brain" },
-    "orchestrator": { "pane_id": "", "agent": "orchestrator", "title": "Orchestrator" },
+    "orchestrator": { "pane_id": "", "agent": "", "title": "Orchestrator" },
     "dispatchers": [],
     "workers": []
   }

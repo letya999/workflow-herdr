@@ -1,0 +1,14 @@
+# Default arguments for Codex. Values support {model}, {effort}, {n}, and {change}.
+args:
+  - "--model"
+  - "{model}"
+  - "-c"
+  - "model_reasoning_effort={effort}"
+  - "--no-alt-screen"
+
+# Add a model here only when it needs different arguments from the default.
+# models:
+#   model-id:
+#     args:
+#       - "--model"
+#       - "{model}"

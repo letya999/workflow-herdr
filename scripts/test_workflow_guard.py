@@ -12,7 +12,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from init_work import exclude_local_runtime
-from workflow_guard import launch_command, resolve_command, validate
+from workflow_guard import launch_command, preflight, resolve_command, validate
 from yaml_lite import dump_yaml
 
 
@@ -37,65 +37,120 @@ class WorkflowGuardTests(unittest.TestCase):
         *,
         active_roles: bool = False,
         pairs: int = 1,
+        plan: bool = True,
     ) -> None:
         change = root / ".herdr" / "runs" / "change"
         change.mkdir(parents=True)
-        (change / "state.yaml").write_text(dump_yaml(state), encoding="utf-8")
-        (change / "run.json").write_text(
-            json.dumps(
+        (change / "tasks.yaml").write_text(dump_yaml(state), encoding="utf-8")
+        panes = []
+        if active_roles:
+            panes.append({"pane_id": "w1:p2", "status": "running"})
+            for index in range(1, pairs + 1):
+                panes.append({"pane_id": f"w{index}:p3", "status": "running"})
+                panes.append({"pane_id": f"w{index}:p4", "status": "running"})
+        run = {
+            "volume": volume,
+            "graph": volume,
+            "herdr_session": "default",
+            "workspace_id": "w1" if active_roles else "",
+            "created": {
+                "workspaces": [],
+                "tabs": [],
+                "panes": panes,
+            },
+            "nodes": {
+                "orchestrator": (
+                    {"pane_id": "w1:p2", "agent": "orchestrator"} if active_roles else {}
+                ),
+                "dispatcher": (
+                    [
+                        {"pane_id": f"w{index}:p3", "agent": f"dispatcher-{index}"}
+                        for index in range(1, pairs + 1)
+                    ]
+                    if active_roles
+                    else []
+                ),
+                "worker": (
+                    [
+                        {"pane_id": f"w{index}:p4", "agent": f"worker-{index}"}
+                        for index in range(1, pairs + 1)
+                    ]
+                    if active_roles
+                    else []
+                ),
+            },
+            "roles": {
+                "orchestrator": {"pane_id": "w1:p2" if active_roles else ""},
+                "dispatchers": (
+                    [
+                        {"pane_id": f"w{index}:p3", "agent": f"dispatcher-{index}"}
+                        for index in range(1, pairs + 1)
+                    ]
+                    if active_roles
+                    else []
+                ),
+                "workers": (
+                    [
+                        {"pane_id": f"w{index}:p4", "agent": f"worker-{index}"}
+                        for index in range(1, pairs + 1)
+                    ]
+                    if active_roles
+                    else []
+                ),
+            },
+        }
+        (change / "run.json").write_text(json.dumps(run), encoding="utf-8")
+        (change / "identity.yaml").write_text(
+            dump_yaml(
                 {
+                    "change": "change",
                     "volume": volume,
+                    "graph": volume,
+                    "herdr_session": "default",
                     "workspace_id": "w1" if active_roles else "",
-                    "created": {
-                        "workspaces": [],
-                        "tabs": [],
-                        "panes": (
-                            [
-                                {"pane_id": "w1:p2", "status": "running"},
-                                *[
-                                    {
-                                        "pane_id": f"w{index}:p3",
-                                        "status": "running",
-                                    }
-                                    for index in range(1, pairs + 1)
-                                ],
-                                *[
-                                    {
-                                        "pane_id": f"w{index}:p4",
-                                        "status": "running",
-                                    }
-                                    for index in range(1, pairs + 1)
-                                ],
-                            ]
-                            if active_roles
-                            else []
-                        ),
+                    "status": "active",
+                }
+            ),
+            encoding="utf-8",
+        )
+        (change / "orchestration.yaml").write_text(
+            dump_yaml({"current_node": "dispatcher", "revision": 1}),
+            encoding="utf-8",
+        )
+        assigned = any(
+            task.get("state")
+            in {"assigned", "running", "in_review", "rejected", "accepted"}
+            for task in state.get("tasks") or []
+        )
+        if plan and assigned and volume != "small":
+            plan_path = change / "plan.md"
+            plan_path.write_text("# plan\n", encoding="utf-8")
+            (change / "artifacts.yaml").write_text(
+                dump_yaml(
+                    {
+                        "plan": str(plan_path.relative_to(root)).replace("\\", "/"),
+                        "plan_revision": 1,
+                    }
+                ),
+                encoding="utf-8",
+            )
+        else:
+            (change / "artifacts.yaml").write_text(dump_yaml({"plan": None}), encoding="utf-8")
+        herdr_dir = root / ".herdr"
+        herdr_dir.mkdir(parents=True, exist_ok=True)
+        (herdr_dir / "detection.yaml").write_text(
+            dump_yaml(
+                {
+                    "systems": {
+                        "requirements": {"sot": "Not used", "confidence": "high", "state": None},
+                        "adr": {"sot": "Not used", "confidence": "high", "state": None},
+                        "plans": {"sot": "Not used", "confidence": "high", "state": None},
+                        "state": {"sot": "Not used", "confidence": "high", "state": None},
                     },
-                    "roles": {
-                        "orchestrator": {"pane_id": "w1:p2" if active_roles else ""},
-                        "dispatchers": (
-                            [
-                                {
-                                    "pane_id": f"w{index}:p3",
-                                    "agent": f"dispatcher-{index}",
-                                }
-                                for index in range(1, pairs + 1)
-                            ]
-                            if active_roles
-                            else []
-                        ),
-                        "workers": (
-                            [
-                                {
-                                    "pane_id": f"w{index}:p4",
-                                    "agent": f"worker-{index}",
-                                }
-                                for index in range(1, pairs + 1)
-                            ]
-                            if active_roles
-                            else []
-                        ),
-                    },
+                    "open_design_decisions": False,
+                    "independent_workstreams": 2 if volume == "large" else 1,
+                    "sizing_graph": volume,
+                    "sizing_reason": "test fixture",
                 }
             ),
             encoding="utf-8",
@@ -196,6 +251,7 @@ class WorkflowGuardTests(unittest.TestCase):
                     ],
                     "workstreams": [],
                 },
+                plan=False,
             )
             result = validate(root, "change")
             self.assertFalse(result["ok"])
@@ -264,6 +320,7 @@ class WorkflowGuardTests(unittest.TestCase):
                         {"id": "stream-1", "task": "task-1", "state": "running"}
                     ],
                 },
+                plan=False,
             )
             result = validate(root, "change")
             self.assertFalse(result["ok"])
@@ -285,6 +342,7 @@ class WorkflowGuardTests(unittest.TestCase):
                     ],
                     "workstreams": [],
                 },
+                plan=False,
             )
             result = validate(root, "change")
             self.assertEqual(result["runnable_tasks"], 0)
@@ -312,6 +370,34 @@ class WorkflowGuardTests(unittest.TestCase):
             result = validate(root, "change")
             self.assertTrue(result["ok"], result["errors"])
 
+    def test_dispatch_without_plan_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_run(
+                root,
+                "medium",
+                {
+                    "tasks": [{"id": "task-1", "state": "running"}],
+                    "workstreams": [
+                        {
+                            "id": "stream-1",
+                            "task": "task-1",
+                            "dispatcher": "dispatcher-1",
+                            "worker": "worker-1",
+                            "state": "running",
+                        }
+                    ],
+                },
+                active_roles=True,
+                plan=False,
+            )
+            result = validate(root, "change")
+            self.assertFalse(result["ok"])
+            self.assertTrue(
+                any("artifacts.plan" in item or "from_plan" in item for item in result["errors"]),
+                result["errors"],
+            )
+
     def test_active_role_requires_running_recorded_pane(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -334,9 +420,7 @@ class WorkflowGuardTests(unittest.TestCase):
             )
             run_file = root / ".herdr" / "runs" / "change" / "run.json"
             run = json.loads(run_file.read_text(encoding="utf-8"))
-            run["created"]["panes"] = [
-                {"pane_id": "w1:p2", "status": "failed"}
-            ]
+            run["created"]["panes"] = [{"pane_id": "w1:p2", "status": "failed"}]
             run_file.write_text(json.dumps(run), encoding="utf-8")
             result = validate(root, "change")
             self.assertIn("pane w1:p2 is not running", result["errors"])
@@ -382,10 +466,61 @@ class WorkflowGuardTests(unittest.TestCase):
                 check=False,
             )
             self.assertEqual(proc.returncode, 0, proc.stderr)
-            state = (root / ".herdr" / "runs" / "change" / "state.yaml").read_text(
+            state = (root / ".herdr" / "runs" / "change" / "tasks.yaml").read_text(
                 encoding="utf-8"
             )
             self.assertEqual(state.count("state: blocked"), 2)
+
+    def test_task_state_stamps_agents_from_run_json(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_run(
+                root,
+                "medium",
+                {
+                    "tasks": [{"id": "task-1", "state": "ready"}],
+                    "workstreams": [
+                        {"id": "stream-1", "task": "task-1", "state": "ready"}
+                    ],
+                },
+                active_roles=True,
+            )
+            change = root / ".herdr" / "runs" / "change"
+            plan_path = change / "plan.md"
+            plan_path.write_text("# plan\n", encoding="utf-8")
+            (change / "artifacts.yaml").write_text(
+                dump_yaml(
+                    {
+                        "plan": str(plan_path.relative_to(root)).replace("\\", "/"),
+                        "plan_revision": 1,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            proc = subprocess.run(
+                [
+                    sys.executable,
+                    str(Path(__file__).with_name("task_state.py")),
+                    "--project",
+                    str(root),
+                    "--change",
+                    "change",
+                    "--task",
+                    "task-1",
+                    "--set",
+                    "assigned",
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            text = (root / ".herdr" / "runs" / "change" / "tasks.yaml").read_text(
+                encoding="utf-8"
+            )
+            self.assertIn("dispatcher: dispatcher-1", text)
+            self.assertIn("worker: worker-1", text)
+            self.assertIn("state: assigned", text)
 
     def test_valid_large_pairs_pass(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -462,6 +597,24 @@ class WorkflowGuardTests(unittest.TestCase):
                         )
                 result = validate(root, "change")
                 self.assertTrue(result["ok"], result["errors"])
+
+    def test_preflight_rejects_exhausted_usage(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            env = {
+                "HERDR_ENV": "1",
+                "WORKFLOW_HERDR_USAGE_JSON": json.dumps({"remaining": 0}),
+            }
+            with mock.patch("workflow_guard.resolve_command", return_value="C:/bin/x.exe"):
+                result = preflight(root, "medium", change="c1", env=env)
+            self.assertFalse(result["ok"])
+            self.assertTrue(any("usage exhausted" in item for item in result["errors"]))
+
+    def test_preflight_unknown_volume(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            result = preflight(Path(directory), "gigantic", env={"HERDR_ENV": "1"})
+            self.assertFalse(result["ok"])
+            self.assertIn("unknown volume: gigantic", result["errors"])
 
 
 if __name__ == "__main__":

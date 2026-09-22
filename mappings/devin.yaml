@@ -1,0 +1,17 @@
+# Default arguments for Devin. This makes bypass explicit per launched agent.
+args:
+  - "--permission-mode"
+  - "dangerous"
+  - "--model"
+  - "{model}"
+  - "--"
+
+# Add a model here only when it needs different arguments from the default.
+# models:
+#   model-id:
+#     args:
+#       - "--permission-mode"
+#       - "dangerous"
+#       - "--model"
+#       - "{model}"
+#       - "--"

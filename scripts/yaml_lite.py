@@ -118,7 +118,12 @@ def _scalar(text: str) -> Any:
     if text in ("false", "False", "off", "Off", "no", "No"):
         return False
     if len(text) >= 2 and text[0] == text[-1] and text[0] in ("'", '"'):
-        return text[1:-1]
+        inner = text[1:-1]
+        if text[0] == '"':
+            inner = (
+                inner.replace("\\n", "\n").replace('\\"', '"').replace("\\\\", "\\")
+            )
+        return inner
     try:
         if text.isdigit() or (text.startswith("-") and text[1:].isdigit()):
             return int(text)

@@ -1,32 +1,36 @@
 # Project-local Herdr manifest: .herdr/workflow.yaml
 # Mapping keys merge recursively with the global workflow.yaml.
 # Scalars and lists replace their global values. Omitted keys keep defaults.
+# Canonical keys are harnesses, nodes, graphs. roles/volumes/clis still work.
 
-# Where Herdr keeps local coordination state:
-# layout:
-#   work_root: ".herdr"
-#   change_dir: "{work_root}/runs/{change}"
-#   state: "{change_dir}/state.yaml"
+# nodes:
+#   worker:
+#     harness: grok
+#     model: grok-4.6
+#     effort: high
 
-roles:
+nodes:
   orchestrator:
-    cli: codex
-    model: gpt-5.6-sol
-    effort: low
+    model: gpt-5.6-luna
+    effort: max
+    # brief: .herdr/briefs/orchestrator.md
   dispatcher:
-    cli: codex
     model: gpt-5.6-luna
     effort: high
   worker:
-    cli: grok
-    model: grok-4.6
-    effort: high
+    harness: devin
+    model: swe2
+    effort: max
 
-# Any global section may be overridden locally. For example:
-# volumes:
+# Old overlay shape still merges:
+# roles:
+#   worker:
+#     cli: grok
+#     model: grok-4.6
+# graphs:
 #   medium:
-#     use_when: One bounded change handled in the project workspace
+#     nodes: [brain, orchestrator, dispatcher, worker]
 # guards:
 #   large_min_runnable_tasks: 3
 # watch:
-#   prompt_wait: false
+#   prompt_wait: true

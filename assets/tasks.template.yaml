@@ -1,9 +1,6 @@
 version: 1
 workflow: medium
 
-# Legacy name. New runs write tasks.yaml (layout.state).
-# Keep this file so older docs and copies still initialize.
-
 tasks: []
 
 workstreams: []

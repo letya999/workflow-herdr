@@ -27,19 +27,15 @@ visibility:
   tab_label: "{change}"
   tab_label_stream: "{change}/{stream}"
 
+# Editable CLI argument maps live in mappings/<harness>.yaml (or .json).
+command_mappings: mappings
+
 harnesses:
   human:
     kind: null
-    args: []
     efforts: []
   codex:
     kind: codex
-    args:
-      - "--model"
-      - "{model}"
-      - "-c"
-      - "model_reasoning_effort={effort}"
-      - "--no-alt-screen"
     efforts:
       - minimal
       - low
@@ -54,22 +50,12 @@ harnesses:
       - o3
   grok:
     kind: grok
-    args:
-      - "--model"
-      - "{model}"
-      - "--reasoning-effort"
-      - "{effort}"
-      - "--no-alt-screen"
     efforts:
       - low
       - high
       - max
   devin:
     kind: devin
-    args:
-      - "--model"
-      - "{model}"
-      - "--"
     efforts:
       - low
       - medium

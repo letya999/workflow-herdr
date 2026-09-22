@@ -26,6 +26,68 @@ def read_yaml(path: Path) -> dict:
     return load_yaml(path.read_text(encoding="utf-8")) or {}
 
 
+def read_mapping(path: Path) -> dict:
+    if path.suffix.lower() == ".json":
+        value = json.loads(path.read_text(encoding="utf-8"))
+    else:
+        value = load_yaml(path.read_text(encoding="utf-8"))
+    if not isinstance(value, dict):
+        raise ValueError(f"command mapping must be a map: {path}")
+    return value
+
+
+def _mapping_path(root: Path, project: Path | None, raw: str) -> Path:
+    path = Path(raw)
+    if path.is_absolute():
+        return path
+    if project is not None and (project / path).exists():
+        return project / path
+    return root / path
+
+
+def _find_mapping(root: Path, project: Path | None, directory: str, name: str) -> Path | None:
+    base = _mapping_path(root, project, directory)
+    for suffix in (".yaml", ".yml", ".json"):
+        path = base / f"{name}{suffix}"
+        if path.is_file():
+            return path
+    return None
+
+
+def attach_command_mappings(data: dict, root: Path, project: Path | None) -> dict:
+    """Load editable harness/model argument maps before normalizing config."""
+    directory = str(data.get("command_mappings") or "mappings")
+    harnesses = dict(data.get("harnesses") or {})
+    for name, original in harnesses.items():
+        harness = dict(original or {})
+        declared = harness.get("mapping")
+        path = (
+            _mapping_path(root, project, str(declared))
+            if declared
+            else _find_mapping(root, project, directory, str(name))
+        )
+        if path is None:
+            harnesses[name] = harness
+            continue
+        mapping = read_mapping(path)
+        default_args = mapping.get("args")
+        if default_args is not None:
+            if not isinstance(default_args, list):
+                raise ValueError(f"mapping args must be a list: {path}")
+            harness["args"] = default_args
+        model_args: dict[str, list] = {}
+        for model, entry in (mapping.get("models") or {}).items():
+            args = entry.get("args") if isinstance(entry, dict) else entry
+            if not isinstance(args, list):
+                raise ValueError(f"mapping model args must be lists: {path} ({model})")
+            model_args[str(model)] = args
+        harness["_model_args"] = model_args
+        harness["_mapping_file"] = str(path)
+        harnesses[name] = harness
+    data["harnesses"] = harnesses
+    return data
+
+
 def expand_layout(config: dict, change: str = "", task: str = "") -> dict[str, str]:
     raw = dict(config.get("layout") or {})
     values: dict[str, str] = {"change": change, "task": task}
@@ -45,6 +107,7 @@ def resolve(project: Path | None) -> dict:
         manifest = Path(project) / (manifest_path or ".herdr/workflow.yaml")
         if manifest.is_file():
             data = deep_merge(data, read_yaml(manifest))
+    data = attach_command_mappings(data, root, project)
     return normalize(data)
 
 
@@ -288,7 +351,11 @@ def native_args(
         "n": worker_index if worker_index is not None else 1,
         "change": change,
     }
-    parts = harness.get("args") if harness.get("args") is not None else cli.get("native_args")
+    model_args = harness.get("_model_args") or {}
+    if str(node.get("model")) in model_args:
+        parts = model_args[str(node.get("model"))]
+    else:
+        parts = harness.get("args") if harness.get("args") is not None else cli.get("native_args")
     return [format_template(str(part), values) for part in parts or []]
 
 

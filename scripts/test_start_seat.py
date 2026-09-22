@@ -175,7 +175,10 @@ class StartSeatTests(unittest.TestCase):
         self.assertNotIn("\n", brief_arg)
         self.assertNotIn("'", brief_arg)
         brief_index = starts[-1].index(brief_arg)
-        self.assertEqual(starts[-1][brief_index - 3:brief_index], ["--model", "swe-2-high", "--"])
+        self.assertEqual(
+            starts[-1][brief_index - 5:brief_index],
+            ["--permission-mode", "dangerous", "--model", "swe-2-high", "--"],
+        )
         self.assertTrue((self.root / ".herdr" / "runs" / "login" / "briefs" / "dispatcher.md").is_file())
         self.assertFalse(any(_cmd(call)[:2] == ["agent", "prompt"] for call in fake.calls))
         self.assertEqual(fake.closed, [])

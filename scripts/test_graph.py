@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 import tempfile
 import unittest
@@ -38,7 +39,10 @@ class GraphTests(unittest.TestCase):
         self.assertEqual(worker["harness"], "devin")
         self.assertEqual(worker["model"], "swe-2-high")
         self.assertEqual(worker["effort"], "high")
-        self.assertEqual(native_args(config, "worker", 1, "x"), ["--model", "swe-2-high", "--"])
+        self.assertEqual(
+            native_args(config, "worker", 1, "x"),
+            ["--permission-mode", "dangerous", "--model", "swe-2-high", "--"],
+        )
         self.assertEqual(wait_timeout_ms(config, "worker"), 1200000)
         self.assertEqual(wait_timeout_ms(config, "dispatcher"), 1200000)
         self.assertEqual(wait_timeout_ms(config, "orchestrator"), 120000)
@@ -118,6 +122,42 @@ class GraphTests(unittest.TestCase):
             self.assertEqual(node_of(config, "worker")["harness"], "grok")
             self.assertEqual(node_of(config, "worker")["model"], "grok-4.6")
             self.assertEqual(node_of(config, "orchestrator")["model"], "gpt-5.6-luna")
+
+    def test_model_mapping_override_wins_over_harness_default(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            mapping_dir = root / "maps"
+            mapping_dir.mkdir()
+            (mapping_dir / "devin.yaml").write_text(
+                "args:\n  - default\nmodels:\n  swe-2-high:\n    args:\n      - special\n      - '{model}'\n",
+                encoding="utf-8",
+            )
+            overlay = root / ".herdr" / "workflow.yaml"
+            overlay.parent.mkdir()
+            overlay.write_text(
+                "command_mappings: maps\n"
+                "nodes:\n"
+                "  worker:\n"
+                "    model: swe-2-high\n",
+                encoding="utf-8",
+            )
+            config = resolve(root)
+            self.assertEqual(native_args(config, "worker", 1, "x"), ["special", "swe-2-high"])
+
+    def test_json_mapping_is_accepted(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            mapping_dir = root / "maps"
+            mapping_dir.mkdir()
+            (mapping_dir / "devin.json").write_text(
+                json.dumps({"args": ["--json", "{model}"]}),
+                encoding="utf-8",
+            )
+            overlay = root / ".herdr" / "workflow.yaml"
+            overlay.parent.mkdir()
+            overlay.write_text("command_mappings: maps\n", encoding="utf-8")
+            config = resolve(root)
+            self.assertEqual(native_args(config, "worker", 1, "x"), ["--json", "swe-2-high"])
 
 
 if __name__ == "__main__":

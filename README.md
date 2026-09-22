@@ -66,6 +66,8 @@ python scripts/task_state.py --project "C:\path\to\project" --change add-login -
 ## Конфигурация
 
 Канон — [`workflow.yaml`](workflow.yaml): `harnesses`, `nodes`, `graphs`.
+Аргументы запуска вынесены в [`mappings/`](mappings/): по одному YAML/JSON
+на harness, с необязательными переопределениями по модели.
 Локальный manifest `.herdr/workflow.yaml` глубоко мержится: словари
 дополняются, списки и скаляры заменяются. Старые ключи `roles` / `volumes` /
 `clis` по-прежнему принимаются и нормализуются.
@@ -83,6 +85,7 @@ guards:
 ```
 
 Шаблон: [`assets/workflow.example.yaml`](assets/workflow.example.yaml).
+Формат аргументов: [`mappings/README.md`](mappings/README.md).
 Профиль проекта: [`references/project-workflow.md`](references/project-workflow.md).
 Как гонять цикл: [`references/run.md`](references/run.md).
 

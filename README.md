@@ -1,55 +1,73 @@
 # Workflow Herdr
 
-YAML-граф для координации человека и AI-агентов **внутри Herdr**.
+<p align="center">
+  <a href="README.ru.md">Русский</a> · <strong>English</strong>
+</p>
 
-Рантайм — сессии, вкладки, pane id и живые имена агентов. Python-скрипты
-пишут файлы, проверяют инварианты и стартуют seat. Отдельного runner, демона
-и шины событий нет.
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT"></a>
+  <a href="https://skills.sh/letya999/workflow-herdr"><img src="https://skills.sh/b/letya999/workflow-herdr" alt="skills.sh"></a>
+  <img src="https://img.shields.io/badge/python-3.10+-blue.svg" alt="Python 3.10+">
+</p>
 
-## Что внутри
+A YAML-defined graph for coordinating a human and AI agents **inside Herdr**.
 
-- графы `small`, `medium`, `large` (и любые overlay-графы из узлов YAML);
-- узлы `Brain`, `Orchestrator`, `Dispatcher`, `Worker`;
-- слои стейта: продукт Herdr, глобальный индекс, overlay проекта, run
+Runtime is sessions, tabs, pane IDs and live agent names. Python scripts write
+files, check invariants and start seats. No separate runner, daemon or event bus.
+
+## What's inside
+
+- `small`, `medium`, `large` graphs (plus any overlay graph composed of YAML nodes);
+- `Brain`, `Orchestrator`, `Dispatcher`, `Worker` node roles;
+- state layers: Herdr product state, global index, project overlay, run
   (`identity`, `run.json`, `orchestration`, `artifacts`, `tasks`);
-- preflight CLI / kind / model / effort / usage до любой topology;
-- `doctor` и `status` (mapped / orphan);
-- focus-or-start с retry `agent_pane_busy` / `agent_prompt_stalled` и rollback;
-- medium в текущем workspace (rename tab/pane), large — labeled worktree;
-- цикл BODW: Dispatcher крутит Worker через `prompt --wait`, Brain не ждёт.
+- preflight for CLI / kind / model / effort / usage before any topology;
+- `doctor` and `status` (mapped / orphan);
+- focus-or-start with `agent_pane_busy` / `agent_prompt_stalled` retry and rollback;
+- medium runs in the current workspace (tab/pane rename), large uses labeled
+  worktrees;
+- BODW loop: Dispatcher drives Workers via `prompt --wait`, Brain does not wait.
 
-## Быстрый старт
+## Install
 
-### Требования
+With `npx skills`:
 
-- Python 3.10 или новее;
-- Git;
-- установленный Herdr;
-- CLI из `workflow.yaml`: Codex (Orchestrator) и Devin (Dispatcher/Worker).
+```bash
+npx skills add letya999/workflow-herdr
+```
 
-### Установка skill
+Or clone into an agent skill directory:
 
 ```powershell
 git clone https://github.com/letya999/workflow-herdr.git "$env:USERPROFILE\.codex\skills\workflow-herdr"
 ```
 
-Скопируйте тот же каталог в `$env:USERPROFILE\.agents\skills\workflow-herdr` и
-`$env:USERPROFILE\.grok\skills\workflow-herdr`, если этими харнессами пользуетесь.
+Copy the same directory into `$env:USERPROFILE\.agents\skills\workflow-herdr` and
+`$env:USERPROFILE\.grok\skills\workflow-herdr` if you use those harnesses too.
 
-### Проверка проекта
+## Quick start
+
+### Requirements
+
+- Python 3.10+
+- Git
+- Herdr installed
+- CLIs from `workflow.yaml`: Codex (Orchestrator) and Devin (Dispatcher/Worker)
+
+### Check a project
 
 ```powershell
 python scripts/bootstrap.py --project "C:\path\to\project"
 ```
 
-Результат — JSON с полем `ok`.
+Returns JSON with an `ok` field.
 
-### Запуск workflow
+### Run a workflow
 
-Короткая задача: Brain отдаёт intent одному Worker в текущем tab, без
-`--wait` на стороне Brain.
+Short task: Brain hands the intent to a single Worker in the current tab, no
+`--wait` on the Brain side.
 
-Для задачи с планом:
+For a planned task:
 
 ```powershell
 python scripts/bootstrap.py --project "C:\path\to\project"
@@ -60,19 +78,18 @@ python scripts/orchestrate.py --project "C:\path\to\project" --change add-login 
 python scripts/task_state.py --project "C:\path\to\project" --change add-login --dump
 ```
 
-`large` требует минимум два независимых workstream с непересекающимися
-файлами и по labeled worktree на поток.
+`large` requires at least two independent workstreams with non-overlapping
+files and one labeled worktree per stream.
 
-## Конфигурация
+## Configuration
 
-Канон — [`workflow.yaml`](workflow.yaml): `harnesses`, `nodes`, `graphs`.
-Аргументы запуска вынесены в [`mappings/`](mappings/): по одному YAML/JSON
-на harness, с необязательными переопределениями по модели.
-Локальный manifest `.herdr/workflow.yaml` глубоко мержится: словари
-дополняются, списки и скаляры заменяются. Старые ключи `roles` / `volumes` /
-`clis` по-прежнему принимаются и нормализуются.
+The canon is [`workflow.yaml`](workflow.yaml): `harnesses`, `nodes`, `graphs`.
+Launch arguments live in [`mappings/`](mappings/): one YAML/JSON per harness,
+with optional per-model overrides. A local `.herdr/workflow.yaml` manifest is
+deep-merged: dicts are merged, lists and scalars replaced. Legacy keys `roles` /
+`volumes` / `clis` are still accepted and normalized.
 
-Минимальный overlay:
+Minimal overlay:
 
 ```yaml
 nodes:
@@ -84,45 +101,46 @@ guards:
   large_min_runnable_tasks: 3
 ```
 
-Шаблон: [`assets/workflow.example.yaml`](assets/workflow.example.yaml).
-Формат аргументов: [`mappings/README.md`](mappings/README.md).
-Профиль проекта: [`references/project-workflow.md`](references/project-workflow.md).
-Как гонять цикл: [`references/run.md`](references/run.md).
+Template: [`assets/workflow.example.yaml`](assets/workflow.example.yaml).
+Argument format: [`mappings/README.md`](mappings/README.md).
+Project profile: [`references/project-workflow.md`](references/project-workflow.md).
+Running the loop: [`references/run.md`](references/run.md).
 
-Основные переходы задачи:
+Main task transitions:
 
 ```text
 pending → ready → assigned → running → in_review → accepted → closed
 ```
 
-`blocked` — стоп до факта или решения человека.
+`blocked` stops until a fact or a human decision.
 
-## Проверка
+## Testing
 
 ```powershell
 python -m unittest discover -s scripts -p "test_*.py" -v
 ```
 
-## Структура
+## Structure
 
 ```text
 workflow.yaml                 # harnesses, nodes, graphs, guards
-SKILL.md                      # skill для харнесса
-README.md                     # quickstart
+SKILL.md                      # skill for the harness
+README.md                     # quickstart (English)
+README.ru.md                  # quickstart (Russian)
 scripts/                      # file helpers, start_seat, tests
-assets/                       # шаблоны run-файлов
-references/run.md             # контракт запуска и BODW-цикла
+assets/                       # run-file templates
+references/run.md             # launch contract and BODW loop
 ```
 
-## Безопасность
+## Security
 
-Не добавляйте в репозиторий `.env`, ключи, токены, service-account JSON.
-Порядок сообщения об уязвимости: [`SECURITY.md`](SECURITY.md).
+Do not commit `.env` files, keys, tokens, or service-account JSON. Vulnerability
+reporting: [`SECURITY.md`](SECURITY.md).
 
-## Участие
+## Contributing
 
-`feature branch → dev → main`. Подробности в [`CONTRIBUTING.md`](CONTRIBUTING.md).
+`feature branch → dev → main`. Details in [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
-## Лицензия
+## License
 
 [MIT](LICENSE).

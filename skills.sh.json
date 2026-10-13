@@ -1,4 +1,13 @@
 {
   "$schema": "https://skills.sh/schemas/skills.sh.schema.json",
-  "skills": ["workflow-herdr"]
+  "notGrouped": "bottom",
+  "groupings": [
+    {
+      "title": "Workflow",
+      "description": "Start a Herdr work run for a change.",
+      "skills": [
+        "workflow-herdr"
+      ]
+    }
+  ]
 }
